@@ -5,6 +5,7 @@ use bevy::{
 use winit::event::DeviceEvent::Key;
 
 mod rendering;
+mod world;
 use rendering::create_window::CtklrWindowPlugin;
 use rendering::render_system::DataBuffer;
 use rendering::camera_data_buffer::CameraData;
@@ -13,11 +14,6 @@ const TIME_STEP: f64 = 1.0 / 60.0;
 
 fn main() {
     env_logger::init();
-
-    let mut something = 10;
-    let reference = &[something];
-    something = 20;
-    println!("{}", reference[0]);
 
     App::new()
         .add_plugin(bevy::core::CorePlugin::default())
@@ -57,5 +53,17 @@ fn input_test(
         camera_data_buffer.data.pos[2] -= 0.02;
     } else if keyboard_input.pressed(KeyCode::W) {
         camera_data_buffer.data.pos[2] += 0.02;
+    }
+
+    if keyboard_input.pressed(KeyCode::LShift) {
+        camera_data_buffer.data.pos[1] -= 0.02;
+    } else if keyboard_input.pressed(KeyCode::Space) {
+        camera_data_buffer.data.pos[1] += 0.02;
+    }
+
+    if keyboard_input.pressed(KeyCode::Q) {
+        camera_data_buffer.data.dir[0] -= 0.02;
+    } else if keyboard_input.pressed(KeyCode::E) {
+        camera_data_buffer.data.dir[0] += 0.02;
     }
 }

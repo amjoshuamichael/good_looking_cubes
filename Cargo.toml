@@ -10,9 +10,10 @@ winit = "0.26.0"
 wgpu = "0.12.0"
 pollster = "0.2.4"
 env_logger = "0.9.0"
+glam = "0.20.2"
 bytemuck = { version = "1.4", features = [ "derive" ] }
+rand = "0.8.0"
 
 [dependencies.bevy]
 path = "bevy"
-
-syn="1.0.89"
+syn = "1.0.89"

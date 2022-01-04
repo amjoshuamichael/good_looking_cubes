@@ -3289,7 +3289,9 @@ dependencies = [
  "bevy",
  "bytemuck",
  "env_logger 0.9.0",
+ "glam",
  "pollster",
+ "rand",
  "wgpu",
  "winit",
 ]
