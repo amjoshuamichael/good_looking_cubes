@@ -1,17 +1,15 @@
-use bevy::prelude::*;
-use bevy::reflect::DynamicMap;
 use bevy::ecs::world::WorldBorrow;
 use winit::window::Window;
-use wgpu::util::DeviceExt;
-use bytemuck::Pod;
+use super::shaders;
 use super::camera_data_buffer::CameraData;
+use super::data_buffer::*;
 use crate::world::world_data::WorldData;
 
 pub struct RenderInfo {
     pub size: winit::dpi::PhysicalSize<u32>,
-    surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub surface: wgpu::Surface,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
 }
 
@@ -70,7 +68,8 @@ impl RenderInfo {
 }
 
 pub struct Renderer {
-    pipeline: wgpu::RenderPipeline,
+    pub pipeline: wgpu::RenderPipeline,
+    pub is_rendering: bool,
 }
 
 impl Renderer {
@@ -81,12 +80,12 @@ impl Renderer {
     ) -> Self {
         let vertex_canvas_shader = render_info.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Vertex Canvas Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/vertex_canvas.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shaders::VERTEX_CANVAS.into()),
         });
 
         let voxel_render_shader = render_info.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Voxel Render Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/voxel_render.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shaders::VOXEL_RENDER.into()),
         });
 
         let pipeline_layout = render_info.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -138,117 +137,8 @@ impl Renderer {
 
         Self {
             pipeline,
+            is_rendering: false,
         }
     }
 }
 
-/// Data that is shared between both the CPU and GPU.
-pub struct DataBuffer<T> {
-    pub data: T,
-    pub buffer: wgpu::Buffer,
-    pub bind_group_layout: wgpu::BindGroupLayout,
-    pub bind_group: wgpu::BindGroup,
-}
-
-pub trait DataForBuffer {
-    fn create() -> Self;
-}
-
-impl<T: DataForBuffer + Pod> DataBuffer<T> {
-    pub fn new(render_info: &RenderInfo, label: &str) -> Self {
-        let mut data = T::create();
-
-        let buffer = render_info.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some(&format!("{} {}", label, "Buffer")),
-                contents: bytemuck::cast_slice(&[data]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
-        );
-
-        let bind_group_layout = render_info.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
-            ],
-            label: Some(&format!("{} {}", label, "Bind Group Layout")),
-        });
-
-        let bind_group = render_info.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                }
-            ],
-            label: Some(&format!("{} {}", label, "Bind Group")),
-        });
-
-        DataBuffer::<T> { data, buffer, bind_group_layout, bind_group }
-    }
-
-    pub fn write_buffer(&self, render_info: &RenderInfo) {
-        render_info.queue.write_buffer(
-            &self.buffer,
-            0,
-            bytemuck::cast_slice(&[self.data]),
-        );
-    }
-}
-
-pub fn render(
-    render_info: &mut RenderInfo,
-    renderer: &Renderer,
-    camera_data_buffer: WorldBorrow<DataBuffer<CameraData>>,
-    world_data_buffer: WorldBorrow<DataBuffer<WorldData>>,
-) -> Result<(), wgpu::SurfaceError> {
-    let output = render_info.surface.get_current_texture()?;
-    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = render_info.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Render Encoder"),
-    });
-
-    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render Pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachment {
-            view: &view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.1,
-                    g: 0.2,
-                    b: 1.0,
-                    a: 0.5,
-                }),
-                store: true,
-            },
-        }],
-        depth_stencil_attachment: None,
-    });
-
-    render_pass.set_pipeline(&renderer.pipeline);
-
-    camera_data_buffer.write_buffer(&render_info);
-    render_pass.set_bind_group(0, &camera_data_buffer.bind_group, &[]);
-    world_data_buffer.write_buffer(&render_info);
-    render_pass.set_bind_group(1, &world_data_buffer.bind_group, &[]);
-
-    render_pass.draw(0..6, 0..1);
-
-    drop(render_pass);
-
-    // submit will accept anything that implements IntoIter
-    render_info.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-
-    Ok(())
-}

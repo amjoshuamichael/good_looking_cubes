@@ -1,12 +1,6 @@
 // Because the ray tracing system doesn't require any work with vertices, the vertices just need to be arranged in a
 // shape around the viewport, on which the actual graphics can be rendered.
 
-// The same struct is in voxel_render.wgsl
-struct VertexOutput {
-    [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] pos: vec2<f32>;
-};
-
 [[stage(vertex)]]
 fn vs_main(
     [[builtin(vertex_index)]] in_vertex_index: u32,

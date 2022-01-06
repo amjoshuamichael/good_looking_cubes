@@ -2,15 +2,16 @@ use bevy::{
     prelude::*,
     core::FixedTimestep
 };
-use winit::event::DeviceEvent::Key;
+use rendering::create_window::CtklrWindowPlugin;
+use rendering::data_buffer::*;
+use rendering::camera_data_buffer::CameraData;
+use rendering::render::render;
 
 mod rendering;
 mod world;
-use rendering::create_window::CtklrWindowPlugin;
-use rendering::render_system::DataBuffer;
-use rendering::camera_data_buffer::CameraData;
 
-const TIME_STEP: f64 = 1.0 / 60.0;
+const PHYSICS_TIME_STEP: f64 = 1.0 / 60.0;
+const RENDER_TIME_STEP: f64 = 1.0 / 30.0;
 
 fn main() {
     env_logger::init();
@@ -22,13 +23,16 @@ fn main() {
         .add_plugin(bevy::input::InputPlugin::default())
         .add_plugin(bevy::asset::AssetPlugin::default())
         .add_plugin(bevy::scene::ScenePlugin::default())
-        .add_plugin(bevy::gilrs::GilrsPlugin::default())
-        .add_plugin(bevy::gltf::GltfPlugin::default())
         .add_plugin(CtklrWindowPlugin::default())
         .add_system_set(
             SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(TIME_STEP))
+                .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                 .with_system(input_test)
+        )
+        .add_system_set(
+            SystemSet::new()
+                .with_run_criteria(FixedTimestep::step(RENDER_TIME_STEP))
+                .with_system(render)
         )
         .run();
 }
@@ -55,10 +59,10 @@ fn input_test(
         camera_data_buffer.data.pos[2] += 0.02;
     }
 
-    if keyboard_input.pressed(KeyCode::LShift) {
-        camera_data_buffer.data.pos[1] -= 0.02;
-    } else if keyboard_input.pressed(KeyCode::Space) {
-        camera_data_buffer.data.pos[1] += 0.02;
+    if keyboard_input.pressed(KeyCode::T) {
+        camera_data_buffer.data.dir[2] -= 0.02;
+    } else if keyboard_input.pressed(KeyCode::Y) {
+        camera_data_buffer.data.dir[2] += 0.02;
     }
 
     if keyboard_input.pressed(KeyCode::Q) {

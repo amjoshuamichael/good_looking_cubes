@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::ecs::event::*;
 use super::camera_data_buffer::CameraData;
 use super::render_system::*;
+use super::data_buffer::*;
 use crate::world::world_data::WorldData;
 use super::bevy_to_winit;
 
@@ -33,6 +34,8 @@ fn create_window_with(mut app: App) {
 
     app.insert_resource::<DataBuffer<CameraData>>(camera_data_buffer);
     app.insert_resource::<DataBuffer<WorldData>>(world_data_buffer);
+    app.insert_resource::<Renderer>(renderer);
+    app.insert_resource::<RenderInfo>(render_info);
 
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -43,11 +46,15 @@ fn create_window_with(mut app: App) {
                     },
 
                     WindowEvent::Resized(physical_size) => {
-                        render_info.resize(*physical_size)
+                        let world = app.world.cell();
+                        let mut render_info = world.get_resource_mut::<RenderInfo>().unwrap();
+                        render_info.resize(*physical_size);
                     },
 
                     WindowEvent::ScaleFactorChanged {new_inner_size, ..} => {
-                        render_info.resize(**new_inner_size)
+                        let world = app.world.cell();
+                        let mut render_info = world.get_resource_mut::<RenderInfo>().unwrap();
+                        render_info.resize(**new_inner_size);
                     },
 
                     WindowEvent::KeyboardInput { ref input, .. } => {
@@ -60,21 +67,6 @@ fn create_window_with(mut app: App) {
                     _ => {}
                 }
             },
-            Event::RedrawRequested(window_id) if window_id == window.id() => {
-                let world = app.world.cell();
-                let camera_data_buffer = world.get_resource::<DataBuffer::<CameraData>>().unwrap();
-                let world_data_buffer = world.get_resource::<DataBuffer::<WorldData>>().unwrap();
-
-                match render(&mut render_info, &renderer, camera_data_buffer, world_data_buffer) {
-                    Ok(_) => {}
-                    // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => render_info.resize(render_info.size),
-                    // The system is out of memory, quit
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
-                } 
-            }
             Event::MainEventsCleared => {
                 // RedrawRequested will only trigger once, unless we manually
                 // request it.

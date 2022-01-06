@@ -1,4 +1,5 @@
-use crate::rendering::render_system::DataForBuffer;
+use crate::rendering::data_buffer::DataForBuffer;
+use crate::rendering::data_buffer::*;
 use rand::prelude::*;
 use rand::seq::SliceRandom;
 
@@ -27,11 +28,26 @@ impl DataForBuffer for WorldData {
 
         for _ in 1..100 {
             let color: u32 = *colors.choose(&mut rng).unwrap();
-            println!("{}", color);
             let place = rng.gen_range(0..512);
 
             output[place] = color;
         }
+
+        // for x in 0..8 {
+        //     for z in 0..8 {
+        //         let color: u32 = *colors.choose(&mut rng).unwrap();
+        //
+        //         output[x + z * 64] = color;
+        //     }
+        // }
+        //
+        // for y in 0..8 {
+        //     for z in 0..8 {
+        //         let color: u32 = *colors.choose(&mut rng).unwrap();
+        //
+        //         output[y * 8 + z * 64] = color;
+        //     }
+        // }
 
         WorldData {
             data: output,
