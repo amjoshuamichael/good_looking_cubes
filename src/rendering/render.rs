@@ -1,71 +1,252 @@
+use std::fmt::Debug;
+use std::io::Read;
 use bevy::prelude::*;
-use bevy::ecs::world::WorldBorrow;
-use super::data_buffer::DataBuffer;
+use bevy::app::Events;
+use bevy::render::render_resource::Buffer;
+use gfx_hal::device::BindError;
+use time::Instant;
+use gfx_hal::prelude::*;
+use crate::CameraData;
+use crate::rendering::data_buffer::DataBuffer;
 use crate::world::world_data::WorldData;
-use super::render_system::{RenderInfo, Renderer};
-use super::camera_data_buffer::CameraData;
+use super::create_window::{RenderInfo, ResourceHolder, Resources};
 
-pub fn render(
-    mut render_info: ResMut<RenderInfo>,
-    mut renderer: ResMut<Renderer>,
-    camera_data_buffer: Res<DataBuffer<CameraData>>,
-    world_data_buffer: Res<DataBuffer<WorldData>>,
+pub struct RenderEvent {
+    pub time: Instant,
+}
+
+const SCALE_FACTOR: u32 = 2;
+
+pub fn render_draw<B: gfx_hal::Backend>(
+    mut render_info: &mut RenderInfo<B>,
+    mut resource_holder: &mut ResourceHolder<B>,
+    mut command_buffer: &mut B::CommandBuffer,
+    camera_data_buffer: &DataBuffer<CameraData>,
+    world_data_buffer: &DataBuffer<WorldData>,
+    mut should_configure_swapchain: bool,
 ) {
-    if !renderer.is_rendering {
-        renderer.is_rendering = true;
+    let res: &mut Resources<_> = &mut resource_holder.0;
+    let render_pass = &res.render_passes[0];
+    let temp_pipeline_layout = &res.pipeline_layouts[0];
+    let temp_pipeline = &res.pipelines[0];
+    let surface_pipeline_layout = &res.pipeline_layouts[1];
+    let surface_pipeline = &res.pipelines[1];
 
-        //TODO: handle wgpu::SurfaceError:Lost and wgpu::SurfaceError::OutOfMemory
-        #[allow(unused_must_use)]
-            _render(&mut *render_info, &mut *renderer, &*camera_data_buffer, &*world_data_buffer);
+    unsafe {
+        // We refuse to wait more than a second, to avoid hanging.
+        let render_timeout_ns = 1_000_000_000;
+
+        res.device
+            .wait_for_fence(&res.submission_complete_fence, render_timeout_ns)
+            .expect("Out of memory or device lost");
+
+        res.device
+            .reset_fence(&res.submission_complete_fence)
+            .expect("Out of memory");
+
+        res.command_pool.reset(false);
+    }
+
+    if should_configure_swapchain {
+        use gfx_hal::window::SwapchainConfig;
+
+        let caps = res.surface.capabilities(&render_info.adapter.physical_device);
+
+        let mut swapchain_config =
+            SwapchainConfig::from_caps(&caps, render_info.surface_color_format, render_info.surface_extent);
+
+        // This seems to fix some fullscreen slowdown on macOS.
+        if caps.image_count.contains(&3) {
+            swapchain_config.image_count = 3;
+        }
+
+        render_info.surface_extent = swapchain_config.extent;
+        render_info.surface_extent = gfx_hal::window::Extent2D {
+            width: render_info.surface_extent.width,
+            height: render_info.surface_extent.height,
+        };
+
+        unsafe {
+            res.surface
+                .configure_swapchain(&res.device, swapchain_config)
+                .expect("Failed to configure swapchain");
+        };
+
+        should_configure_swapchain = false;
+    }
+
+    let surface_image = unsafe {
+        // We refuse to wait more than a second, to avoid hanging.
+        let acquire_timeout_ns = 1_000_000_000;
+
+        match res.surface.acquire_image(acquire_timeout_ns) {
+            Ok((image, _)) => image,
+            Err(_) => {
+                should_configure_swapchain = true;
+                return;
+            }
+        }
+    };
+
+    let temp_framebuffer = unsafe {
+        use std::borrow::Borrow;
+
+        use gfx_hal::image::Extent;
+
+        res.device
+            .create_framebuffer(
+                render_pass,
+                vec![&res.image_view],
+                Extent {
+                    width: render_info.render_resolution.0,
+                    height: render_info.render_resolution.1,
+                    depth: 1
+                },
+            )
+            .unwrap()
+    };
+
+    let surface_framebuffer = unsafe {
+        use std::borrow::Borrow;
+
+        use gfx_hal::image::Extent;
+
+        res.device
+            .create_framebuffer(
+                render_pass,
+                vec![surface_image.borrow()],
+                Extent {
+                    width: render_info.surface_extent.width,
+                    height: render_info.surface_extent.height,
+                    depth: 1
+                },
+            )
+            .unwrap()
+    };
+
+    let (low_res_viewport, full_viewport) = {
+        use gfx_hal::pso::{Rect, Viewport};
+
+        let low_res = Viewport {
+            rect: Rect {
+                x: 0,
+                y: 0,
+                w: render_info.render_resolution.0 as i16,
+                h: render_info.render_resolution.1 as i16,
+            },
+            depth: 0.0..1.0,
+        };
+
+        let full = Viewport {
+            rect: Rect {
+                x: 0,
+                y: 0,
+                w: render_info.surface_extent.width as i16,
+                h: render_info.surface_extent.height as i16,
+            },
+            depth: 0.0..1.0,
+        };
+
+        (low_res, full)
+    };
+    unsafe {
+        use gfx_hal::pso::ShaderStageFlags;
+        use super::camera_data_buffer::*;
+        use gfx_hal::command::{
+            ClearColor, ClearValue, CommandBuffer, CommandBufferFlags, SubpassContents,
+        };
+        use gfx_hal::image::{Layout, Filter};
+
+        command_buffer.begin_primary(CommandBufferFlags::ONE_TIME_SUBMIT);
+
+        command_buffer.set_viewports(0, &[low_res_viewport.clone()]);
+        command_buffer.set_scissors(0, &[low_res_viewport.rect]);
+
+        command_buffer.begin_render_pass(
+            render_pass,
+            &temp_framebuffer,
+            low_res_viewport.rect,
+            &[ClearValue {
+                color: ClearColor {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                },
+            }],
+            SubpassContents::Inline,
+        );
+        command_buffer.bind_graphics_pipeline(temp_pipeline);
+
+        command_buffer.push_graphics_constants(
+            temp_pipeline_layout,
+            camera_data_buffer.shader_stage,
+            0,
+            camera_data_buffer.bytes(),
+        );
+
+        command_buffer.push_graphics_constants(
+            temp_pipeline_layout,
+            world_data_buffer.shader_stage,
+            32,
+            world_data_buffer.bytes(),
+        );
+
+        command_buffer.draw(0..6, 0..1);
+
+        command_buffer.end_render_pass();
+
+        command_buffer.bind_graphics_descriptor_sets(&surface_pipeline_layout, 0, Some(&res.description_set), &[]);
+
+        command_buffer.set_viewports(0, &[full_viewport.clone()]);
+        command_buffer.set_scissors(0, &[full_viewport.rect]);
+
+        command_buffer.begin_render_pass(
+            render_pass,
+            &surface_framebuffer,
+            full_viewport.rect,
+            &[ClearValue {
+                color: ClearColor {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                },
+            }],
+            SubpassContents::Inline,
+        );
+
+        command_buffer.bind_graphics_pipeline(surface_pipeline);
+
+        command_buffer.draw(0..6, 0..1);
+        command_buffer.end_render_pass();
+
+        command_buffer.finish();
+    }
+
+    unsafe {
+        use gfx_hal::queue::{CommandQueue, Submission};
+
+        let submission = Submission {
+            command_buffers: vec![&command_buffer],
+            wait_semaphores: None,
+            signal_semaphores: vec![&res.rendering_complete_semaphore],
+        };
+
+        render_info.queue_group.queues[0].submit(submission, Some(&res.submission_complete_fence));
+
+        let result = render_info.queue_group.queues[0].present(
+            &mut res.surface,
+            surface_image,
+            Some(&res.rendering_complete_semaphore),
+        );
+
+        should_configure_swapchain |= result.is_err();
+
+        res.device.destroy_framebuffer(temp_framebuffer);
+        res.device.destroy_framebuffer(surface_framebuffer);
     }
 }
 
-fn _render(
-    render_info: &mut RenderInfo,
-    renderer: &mut Renderer,
-    camera_data_buffer: &DataBuffer<CameraData>,
-    world_data_buffer: &DataBuffer<WorldData>,
-) -> Result<(), wgpu::SurfaceError> {
-    let output = render_info.surface.get_current_texture()?;
-    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = render_info.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Render Encoder"),
-    });
-
-    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render Pass"),
-        color_attachments: &[wgpu::RenderPassColorAttachment {
-            view: &view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.1,
-                    g: 0.2,
-                    b: 1.0,
-                    a: 0.5,
-                }),
-                store: true,
-            },
-        }],
-        depth_stencil_attachment: None,
-    });
-
-    render_pass.set_pipeline(&renderer.pipeline);
-
-    camera_data_buffer.write_buffer(&render_info);
-    render_pass.set_bind_group(0, &camera_data_buffer.bind_group, &[]);
-    world_data_buffer.write_buffer(&render_info);
-    render_pass.set_bind_group(1, &world_data_buffer.bind_group, &[]);
-
-    render_pass.draw(0..6, 0..1);
-
-    drop(render_pass);
-
-    renderer.is_rendering = false;
-
-    // submit will accept anything that implements IntoIter
-    render_info.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-
-    Ok(())
-}
+// command_buffer.blit_image(
+// &res.image_view,
+// Layout::ShaderReadOnlyOptimal,
+// &surface_image,
+// Layout::General,
+// Filter::Nearest,
+// 0..1;
+// );

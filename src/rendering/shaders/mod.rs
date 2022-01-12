@@ -5,16 +5,23 @@
 
 pub static VERTEX_CANVAS: &str =
     concat!(
-        include_str!("vertex_struct.wgsl"),
-        include_str!("vertex_canvas.wgsl"),
+        include_str!("version_header.glsl"),
+        include_str!("canvas.vert"),
     );
 
 pub static VOXEL_RENDER: &str =
     concat!(
-        include_str!("vertex_struct.wgsl"),
-        include_str!("random.wgsl"),
-        include_str!("vector_utils.wgsl"),
-        include_str!("index_world.wgsl"),
-        include_str!("plane_intersection.wgsl"),
-        include_str!("voxel_render.wgsl"),
+        include_str!("version_header.glsl"),
+        include_str!("pc_buffer.glsl"),
+        include_str!("vector_utils.glsl"),
+        include_str!("random.glsl"),
+        include_str!("index_world.glsl"),
+        include_str!("plane_intersection.glsl"),
+        include_str!("voxel_render.frag"),
+    );
+
+pub static POST_PROCESSING: &str =
+    concat!(
+        include_str!("version_header.glsl"),
+        include_str!("post_processing.glsl"),
     );
