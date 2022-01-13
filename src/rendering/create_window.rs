@@ -539,7 +539,6 @@ fn compile_shader(glsl: &str, shader_kind: ShaderKind) -> Vec<u32> {
     let mut compiler = shaderc::Compiler::new().unwrap();
 
     let mut compiler_options = shaderc::CompileOptions::new().unwrap();
-    compiler_options.set_optimization_level(OptimizationLevel::Performance);
 
     let compiled_shader = compiler
         .compile_into_spirv(glsl, shader_kind, "unnamed", "main", Some(&compiler_options))
