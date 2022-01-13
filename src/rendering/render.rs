@@ -28,9 +28,11 @@ pub fn render_draw<B: gfx_hal::Backend>(
     let res: &mut Resources<_> = &mut resource_holder.0;
     let render_pass = &res.render_passes[0];
     let temp_pipeline_layout = &res.pipeline_layouts[0];
-    let temp_pipeline = &res.pipelines[0];
+    let temp_pipeline = &res.render_pipelines[0];
     let surface_pipeline_layout = &res.pipeline_layouts[1];
-    let surface_pipeline = &res.pipelines[1];
+    let surface_pipeline = &res.render_pipelines[1];
+    let compute_pipeline_layout = &res.pipeline_layouts[2];
+    let compute_pipeline = &res.compute_pipelines[0];
 
     unsafe {
         // We refuse to wait more than a second, to avoid hanging.
@@ -90,13 +92,12 @@ pub fn render_draw<B: gfx_hal::Backend>(
 
     let temp_framebuffer = unsafe {
         use std::borrow::Borrow;
-
         use gfx_hal::image::Extent;
 
         res.device
             .create_framebuffer(
                 render_pass,
-                vec![&res.image_view],
+                vec![&res.image_views[0]],
                 Extent {
                     width: render_info.render_resolution.0,
                     height: render_info.render_resolution.1,
@@ -108,7 +109,6 @@ pub fn render_draw<B: gfx_hal::Backend>(
 
     let surface_framebuffer = unsafe {
         use std::borrow::Borrow;
-
         use gfx_hal::image::Extent;
 
         res.device
@@ -150,7 +150,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
         (low_res, full)
     };
     unsafe {
-        use gfx_hal::pso::ShaderStageFlags;
+        use gfx_hal::pso::{ ShaderStageFlags, Rect };
         use super::camera_data_buffer::*;
         use gfx_hal::command::{
             ClearColor, ClearValue, CommandBuffer, CommandBufferFlags, SubpassContents,
@@ -158,6 +158,14 @@ pub fn render_draw<B: gfx_hal::Backend>(
         use gfx_hal::image::{Layout, Filter};
 
         command_buffer.begin_primary(CommandBufferFlags::ONE_TIME_SUBMIT);
+
+        command_buffer.bind_graphics_descriptor_sets(&compute_pipeline_layout, 0, Some(&res.description_sets[1]), &[]);
+
+        command_buffer.bind_compute_pipeline(compute_pipeline);
+        command_buffer.dispatch([80, 80, 80]);
+
+
+        command_buffer.bind_graphics_descriptor_sets(&temp_pipeline_layout, 0, Some(&res.description_sets[1]), &[]);
 
         command_buffer.set_viewports(0, &[low_res_viewport.clone()]);
         command_buffer.set_scissors(0, &[low_res_viewport.rect]);
@@ -193,7 +201,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
 
         command_buffer.end_render_pass();
 
-        command_buffer.bind_graphics_descriptor_sets(&surface_pipeline_layout, 0, Some(&res.description_set), &[]);
+        command_buffer.bind_graphics_descriptor_sets(&surface_pipeline_layout, 0, Some(&res.description_sets[0]), &[]);
 
         command_buffer.set_viewports(0, &[full_viewport.clone()]);
         command_buffer.set_scissors(0, &[full_viewport.rect]);
@@ -241,12 +249,3 @@ pub fn render_draw<B: gfx_hal::Backend>(
         res.device.destroy_framebuffer(surface_framebuffer);
     }
 }
-
-// command_buffer.blit_image(
-// &res.image_view,
-// Layout::ShaderReadOnlyOptimal,
-// &surface_image,
-// Layout::General,
-// Filter::Nearest,
-// 0..1;
-// );

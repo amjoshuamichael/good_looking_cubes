@@ -3,26 +3,21 @@ use std::mem::ManuallyDrop;
 use bevy::app::Events;
 use gfx_hal::prelude::*;
 use gfx_hal::{
-    device::Device,
-    window::{Extent2D, PresentationSurface, Surface},
-    Instance,
+    adapter::Adapter,
+    format::Format,
+    pso::ShaderStageFlags, //TODO: move
+    queue::QueueGroup,
+    window::Extent2D,
 };
-use gfx_hal::adapter::Adapter;
-use gfx_hal::format::Format;
-use gfx_hal::pso::{ImageDescriptorType, ShaderStageFlags};
-use gfx_hal::queue::QueueGroup;
+use gfx_hal::image::{Kind, ViewKind};
+use gfx_hal::pso::{ComputePipelineDesc, ImageDescriptorType};
 use shaderc::ShaderKind;
-use winit::dpi::{LogicalSize, PhysicalSize};
-use bytemuck::Pod;
 use time::Instant;
-use shaderc::{CompileOptions, OptimizationLevel};
-use crate::rendering::bevy_to_winit;
-use crate::rendering::render::RenderEvent;
+use winit::dpi::{LogicalSize, PhysicalSize};
+use crate::{CameraData, DataBuffer};
+use crate::rendering::{bevy_to_winit, shaders};
+use crate::rendering::render::{render_draw, RenderEvent};
 use crate::world::world_data::WorldData;
-use super::data_buffer::{DataBuffer, DataForBuffer};
-use super::render::render_draw;
-use super::camera_data_buffer::CameraData;
-use super::shaders;
 
 pub struct Resources<B: gfx_hal::Backend> {
     pub instance: B::Instance,
@@ -30,13 +25,14 @@ pub struct Resources<B: gfx_hal::Backend> {
     pub device: B::Device,
     pub render_passes: Vec<B::RenderPass>,
     pub pipeline_layouts: Vec<B::PipelineLayout>,
-    pub pipelines: Vec<B::GraphicsPipeline>,
+    pub render_pipelines: Vec<B::GraphicsPipeline>,
+    pub compute_pipelines: Vec<B::ComputePipeline>,
+    pub image_views: Vec<B::ImageView>,
+    pub description_sets: Vec<B::DescriptorSet>,
+    pub samplers: Vec<B::Sampler>,
     pub command_pool: B::CommandPool,
     pub submission_complete_fence: B::Fence,
     pub rendering_complete_semaphore: B::Semaphore,
-    pub image_view: B::ImageView,
-    pub description_set: B::DescriptorSet,
-    pub sampler: B::Sampler,
 }
 
 pub struct ResourceHolder<B: gfx_hal::Backend>(pub ManuallyDrop<Resources<B>>);
@@ -51,30 +47,26 @@ impl<B: gfx_hal::Backend> Drop for ResourceHolder<B> {
                 command_pool,
                 render_passes,
                 pipeline_layouts,
-                pipelines,
+                render_pipelines,
+                compute_pipelines,
+                image_views,
+                description_sets,
+                samplers,
                 submission_complete_fence,
                 rendering_complete_semaphore,
-                image_view,
-                description_set,
-                sampler,
             } = ManuallyDrop::take(&mut self.0);
 
             device.destroy_semaphore(rendering_complete_semaphore);
             device.destroy_fence(submission_complete_fence);
-            for pipeline in pipelines {
-                device.destroy_graphics_pipeline(pipeline);
-            }
-            for pipeline_layout in pipeline_layouts {
-                device.destroy_pipeline_layout(pipeline_layout);
-            }
-            for render_pass in render_passes {
-                device.destroy_render_pass(render_pass);
-            }
+            for pipeline in render_pipelines { device.destroy_graphics_pipeline(pipeline); }
+            for pipeline in compute_pipelines { device.destroy_compute_pipeline(pipeline); }
+            for layout in pipeline_layouts { device.destroy_pipeline_layout(layout); }
+            for pass in render_passes { device.destroy_render_pass(pass); }
+            for view in image_views { device.destroy_image_view(view); }
+            for sampler in samplers { device.destroy_sampler(sampler); }
             device.destroy_command_pool(command_pool);
-            device.destroy_sampler(sampler);
             surface.unconfigure_swapchain(&device);
             instance.destroy_surface(surface);
-            //TODO: dispose of image_view memory
         }
     }
 }
@@ -100,7 +92,7 @@ fn create_window(
     mut app: App,
 ) {
     const APP_NAME: &'static str = "gfx test";
-    const WINDOW_SIZE: [u32; 2] = [512, 512];
+    const WINDOW_SIZE: [u32; 2] = [1024, 1024];
 
     let camera_data_buffer = DataBuffer::<CameraData>::new(ShaderStageFlags::FRAGMENT);
     let world_data_buffer = DataBuffer::<WorldData>::new(ShaderStageFlags::FRAGMENT);
@@ -140,7 +132,9 @@ fn create_window(
             .queue_families
             .iter()
             .find(|family| {
-                surface.supports_queue_family(family) && family.queue_type().supports_graphics()
+                surface.supports_queue_family(family)
+                && family.queue_type().supports_graphics()
+                && family.queue_type().supports_compute()
             })
             .expect("No compatible queue family found");
 
@@ -165,31 +159,40 @@ fn create_window(
         (command_pool, command_buffer)
     };
 
-    let surface_color_format = {
-        use gfx_hal::format::ChannelType;
+    let (surface_color_format, world_format) = {
+        use gfx_hal::format::{ChannelType, SurfaceType};
 
         let supported_formats = surface
             .supported_formats(&adapter.physical_device)
             .unwrap_or(vec![]);
 
-        let default_format = *supported_formats.get(0).unwrap_or(&Format::Rgba8Srgb);
+        let default_surface_format = *supported_formats.get(0).unwrap_or(&Format::Rgba8Srgb);
+        let default_world_format = Format::Rgba8Snorm;
 
-        supported_formats.into_iter()
+        let surface_format = supported_formats.to_owned().into_iter()
             .find(|format| format.base_format().1 == ChannelType::Srgb)
-            .unwrap_or(default_format)
+            .unwrap_or(default_surface_format);
+
+        let world_format = supported_formats.to_owned().into_iter()
+            .find(|format| format.base_format().0 == SurfaceType::R8_G8_B8_A8
+                        && format.base_format().1 == ChannelType::Snorm)
+            .unwrap_or(default_world_format);
+
+        println!("world format is: {:?}", world_format);
+
+        (surface_format, world_format)
     };
 
-    let render_pass = unsafe {
-        use gfx_hal::image::{
-            Layout, Access
-        };
+    let basic_render_pass = unsafe {
+        use gfx_hal::image::{ Layout, Access };
         use gfx_hal::pass::{
-            Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, SubpassDesc, SubpassId, SubpassDependency
+            Attachment, AttachmentLoadOp, AttachmentOps, AttachmentStoreOp, SubpassDesc, SubpassId,
+            SubpassDependency
         };
         use gfx_hal::pso::PipelineStage;
         use gfx_hal::memory::Dependencies;
 
-        device
+        let basic = device
             .create_render_pass(&[
                 Attachment {
                     format: Some(surface_color_format),
@@ -206,137 +209,56 @@ fn create_window(
                     resolves: &[],
                     preserves: &[],
                 }
-            ], &[
-                SubpassDependency {
-                    passes: Some(0)..Some(1),
-                    stages: PipelineStage::COLOR_ATTACHMENT_OUTPUT..PipelineStage::COLOR_ATTACHMENT_OUTPUT,
-                    accesses: Access::empty()
-                        ..(Access::COLOR_ATTACHMENT_READ | Access::COLOR_ATTACHMENT_WRITE),
-                    flags: Dependencies::BY_REGION,
-                }
-            ])
-            .expect("Out of memory")
+            ], &[])
+            .expect("Out of memory");
+
+        basic
     };
 
     let (width, height) = (400, 400);
 
-    let (image_view) = unsafe {
-        use gfx_hal::image::{Kind, Tiling, Usage, ViewCapabilities, ViewKind, SubresourceRange, Size};
-        use gfx_hal::format::Swizzle;
-        use gfx_hal::MemoryTypeId;
-        let mut image = device
-            .create_image(
-                Kind::D2(width, height, 1, 1),
-                1,
-                surface_color_format,
-                Tiling::Linear,
-                Usage::all(),
-                ViewCapabilities::empty(),
-            )
-            .unwrap();
+    let (temp_image_view, world_view) = unsafe {
+        use gfx_hal::image::{Kind, ViewKind};
 
-        let memory = device
-            .allocate_memory(
-                MemoryTypeId(0),
-                device.get_image_requirements(&image).size,
-            )
-            .unwrap();
+        let temp = generate_image::<backend::Backend>(
+            &device,
+            Kind::D2(width, height, 1, 1),
+            ViewKind::D2,
+            surface_color_format,
+        );
 
-        device
-            .bind_image_memory(&memory, 0, &mut image)
-            .expect("failed to allocate image memory");
+        let world = generate_image::<backend::Backend>(
+            &device,
+            Kind::D3(8, 8, 8),
+            ViewKind::D3,
+            world_format,
+        );
 
-        let view = device
-            .create_image_view(
-                &image,
-                ViewKind::D2,
-                surface_color_format,
-                Swizzle::default(),
-                SubresourceRange::default(),
-            )
-            .expect("failed to link image to shader via image view");
-
-        view
+        (temp, world)
     };
 
     let vertex_shader = shaders::VERTEX_CANVAS;
     let fragment_shader = shaders::VOXEL_RENDER;
     let post_processing_shader = shaders::POST_PROCESSING;
+    let world_draw_shader = shaders::WORLD_DRAW;
 
-    let (set_layout, description_set, sampler) = unsafe {
-        use gfx_hal::pso;
-        use gfx_hal::image;
-
-        let set_layout =
-            device.create_descriptor_set_layout(
-                &[
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 0,
-                        ty: pso::DescriptorType::Image { ty: ImageDescriptorType::Sampled { with_sampler: true } },
-                        count: 1,
-                        stage_flags: ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 1,
-                        ty: pso::DescriptorType::Sampler,
-                        count: 1,
-                        stage_flags: ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                ],
-                &[],
-            )
-            .expect("Can't create descriptor set layout");
-
-        let mut desc_pool = device.create_descriptor_pool(
-                1, // sets
-                &[
-                    pso::DescriptorRangeDesc {
-                        ty: pso::DescriptorType::Image { ty: ImageDescriptorType::Sampled { with_sampler: true } },
-                        count: 1,
-                    },
-                    pso::DescriptorRangeDesc {
-                        ty: pso::DescriptorType::Sampler,
-                        count: 1,
-                    },
-                ],
-                gfx_hal::pso::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET,
-            )
-            .expect("Can't create descriptor pool");
-
-        let desc_set = desc_pool.allocate_set(&set_layout).unwrap();
-
-        let sampler =
-            device
-                .create_sampler(&image::SamplerDesc::new(image::Filter::Nearest, image::WrapMode::Clamp))
-                .unwrap();
-
-        println!("we are about to write descriptor sets...");
-        device.write_descriptor_sets(vec![
-            pso::DescriptorSetWrite {
-                set: &desc_set,
-                binding: 0,
-                array_offset: 0,
-                descriptors: Some(pso::Descriptor::Image(&image_view, image::Layout::General)),
-            },
-            pso::DescriptorSetWrite {
-                set: &desc_set,
-                binding: 1,
-                array_offset: 0,
-                descriptors: Some(pso::Descriptor::Sampler(&sampler)),
-            },
-        ]);
-        println!("we have written the descriptor sets!");
-
-        (set_layout, desc_set, sampler)
+    let (image_set_layout, temp_description_set, temp_sampler) = unsafe {
+        generate_image_bindings::<backend::Backend>(&device, &temp_image_view)
     };
 
-    let (temp_pipeline_layout, surface_pipeline_layout) = unsafe {
+    let (world_set_layout, world_description_set, world_sampler) = unsafe {
+        generate_image_bindings::<backend::Backend>(&device, &world_view)
+    };
+
+    let (temp_pipeline_layout, surface_pipeline_layout, world_pipeline_layout) = unsafe {
         use gfx_hal::pso::ShaderStageFlags;
 
+        let _world_set_layout = [
+            world_set_layout,
+        ];
+
         let temp = device
-            .create_pipeline_layout(&[], &[
+            .create_pipeline_layout(&_world_set_layout, &[
                 camera_data_buffer.layout(),
                 world_data_buffer.layout(),
             ])
@@ -344,19 +266,31 @@ fn create_window(
 
         let surface = device
             .create_pipeline_layout(&[
-                set_layout,
+                image_set_layout,
             ], &[])
             .expect("Out of memory");
 
-        (temp, surface)
+        let world = device
+            .create_pipeline_layout(&_world_set_layout, &[])
+            .expect("Out of memory");
+
+        (temp, surface, world)
     };
 
     let mut should_configure_swapchain = true;
 
-    let temp_pipeline = unsafe {
-        make_pipeline::<backend::Backend>(
+    let world_pipeline = unsafe {
+        make_compute_pipeline::<backend::Backend>(
             &device,
-            &render_pass,
+            &world_pipeline_layout,
+            &world_draw_shader,
+        )
+    };
+
+    let temp_pipeline = unsafe {
+        make_render_pipeline::<backend::Backend>(
+            &device,
+            &basic_render_pass,
             &temp_pipeline_layout,
             vertex_shader,
             fragment_shader,
@@ -364,9 +298,9 @@ fn create_window(
     };
 
     let surface_pipeline = unsafe {
-        make_pipeline::<backend::Backend>(
+        make_render_pipeline::<backend::Backend>(
             &device,
-            &render_pass,
+            &basic_render_pass,
             &surface_pipeline_layout,
             vertex_shader,
             post_processing_shader,
@@ -381,14 +315,15 @@ fn create_window(
             surface,
             device,
             command_pool,
-            render_passes: vec![render_pass],
-            pipeline_layouts: vec![temp_pipeline_layout, surface_pipeline_layout],
-            pipelines: vec![temp_pipeline, surface_pipeline],
+            render_passes: vec![basic_render_pass],
+            pipeline_layouts: vec![temp_pipeline_layout, surface_pipeline_layout, world_pipeline_layout],
+            render_pipelines: vec![temp_pipeline, surface_pipeline],
+            compute_pipelines: vec![world_pipeline],
+            image_views: vec![temp_image_view, world_view],
+            description_sets: vec![temp_description_set, world_description_set],
+            samplers: vec![temp_sampler, world_sampler],
             submission_complete_fence,
             rendering_complete_semaphore,
-            image_view,
-            description_set,
-            sampler,
         }));
 
     let mut render_info = RenderInfo {
@@ -413,22 +348,6 @@ fn create_window(
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                // WindowEvent::Resized(new_dimensions) => {
-                //     surface_extent = Extent2D {
-                //         width: new_dimensions.width / 8,
-                //         height: new_dimensions.height / 8,
-                //     };
-                //     should_configure_swapchain = true;
-                //     println!("resized! new dimensions are:{},{}", surface_extent.width, surface_extent.height);
-                // }
-                // WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                //     surface_extent = Extent2D {
-                //         width: new_inner_size.width / 8,
-                //         height: new_inner_size.height / 8,
-                //     };
-                //     should_configure_swapchain = true;
-                //     println!("scale factor changed");
-                // },
                 WindowEvent::KeyboardInput {ref input, ..} => {
                     let world = app.world.cell();
                     let mut keyboard_input_events =
@@ -462,8 +381,7 @@ fn create_window(
     });
 }
 
-/// Create a pipeline with the given layout and shaders.
-unsafe fn make_pipeline<B: gfx_hal::Backend>(
+unsafe fn make_render_pipeline<B: gfx_hal::Backend>(
     device: &B::Device,
     render_pass: &B::RenderPass,
     pipeline_layout: &B::PipelineLayout,
@@ -535,14 +453,160 @@ unsafe fn make_pipeline<B: gfx_hal::Backend>(
     pipeline
 }
 
+unsafe fn make_compute_pipeline<B: gfx_hal::Backend>(
+    device: &B::Device,
+    pipeline_layout: &B::PipelineLayout,
+    shader: &str,
+) -> B::ComputePipeline {
+    use gfx_hal::pso::{ EntryPoint, Specialization, ComputePipelineDesc };
+
+    let shader_module = device
+        .create_shader_module(&compile_shader(shader, ShaderKind::Compute))
+        .expect("Failed to create fragment shader module");
+
+    let entry = EntryPoint {
+        entry: "main",
+        module: &shader_module,
+        specialization: Specialization::default(),
+    };
+
+    let pipeline_desc = ComputePipelineDesc::new(
+        entry,
+        pipeline_layout,
+    );
+
+    let pipeline = device
+        .create_compute_pipeline(&pipeline_desc, None)
+        .expect("failed to create compute pipeline");
+
+    device.destroy_shader_module(shader_module);
+
+    pipeline
+}
+
+unsafe fn generate_image<B: gfx_hal::Backend>(
+    device: &B::Device,
+    kind: Kind,
+    view_kind: ViewKind,
+    color_format: Format,
+) -> B::ImageView {
+    use gfx_hal::image::{Kind, Tiling, Usage, ViewCapabilities, ViewKind, SubresourceRange, Size};
+    use gfx_hal::format::Swizzle;
+    use gfx_hal::MemoryTypeId;
+
+    let mut image = device
+        .create_image(
+            kind,
+            1,
+            color_format,
+            Tiling::Linear,
+            Usage::all(),
+            ViewCapabilities::empty(),
+        )
+        .unwrap();
+
+    let memory = device
+        .allocate_memory(
+            MemoryTypeId(0),
+            device.get_image_requirements(&image).size,
+        )
+        .unwrap();
+
+    device
+        .bind_image_memory(&memory, 0, &mut image)
+        .expect("failed to allocate image memory");
+
+    let view = device
+        .create_image_view(
+            &image,
+            view_kind,
+            color_format,
+            Swizzle::default(),
+            SubresourceRange::default(),
+        )
+        .expect("failed to link image to shader via image view");
+
+    view
+}
+
+unsafe fn generate_image_bindings<B: gfx_hal::Backend>(
+    device: &B::Device,
+    image_view: &B::ImageView,
+) -> (B::DescriptorSetLayout, B::DescriptorSet, B::Sampler) {
+    use gfx_hal::pso;
+    use gfx_hal::image;
+
+    let set_layout =
+        device.create_descriptor_set_layout(
+            &[
+                pso::DescriptorSetLayoutBinding {
+                    binding: 0,
+                    ty: pso::DescriptorType::Image { ty: ImageDescriptorType::Sampled { with_sampler: true } },
+                    count: 1,
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    immutable_samplers: false,
+                },
+                pso::DescriptorSetLayoutBinding {
+                    binding: 1,
+                    ty: pso::DescriptorType::Sampler,
+                    count: 1,
+                    stage_flags: ShaderStageFlags::FRAGMENT,
+                    immutable_samplers: false,
+                },
+            ],
+            &[],
+        )
+            .expect("Can't create descriptor set layout");
+
+    let mut desc_pool = device.create_descriptor_pool(
+        1, // sets
+        &[
+            pso::DescriptorRangeDesc {
+                ty: pso::DescriptorType::Image { ty: ImageDescriptorType::Sampled { with_sampler: true } },
+                count: 1,
+            },
+            pso::DescriptorRangeDesc {
+                ty: pso::DescriptorType::Sampler,
+                count: 1,
+            },
+        ],
+        gfx_hal::pso::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET,
+    )
+        .expect("Can't create descriptor pool");
+
+    let desc_set = desc_pool.allocate_set(&set_layout).unwrap();
+
+    let sampler =
+        device
+            .create_sampler(&image::SamplerDesc::new(image::Filter::Nearest, image::WrapMode::Clamp))
+            .unwrap();
+
+    device.write_descriptor_sets(vec![
+        pso::DescriptorSetWrite {
+            set: &desc_set,
+            binding: 0,
+            array_offset: 0,
+            descriptors: Some(pso::Descriptor::Image(image_view, image::Layout::General)),
+        },
+        pso::DescriptorSetWrite {
+            set: &desc_set,
+            binding: 1,
+            array_offset: 0,
+            descriptors: Some(pso::Descriptor::Sampler(&sampler)),
+        },
+    ]);
+
+    (set_layout, desc_set, sampler)
+}
+
 fn compile_shader(glsl: &str, shader_kind: ShaderKind) -> Vec<u32> {
     let mut compiler = shaderc::Compiler::new().unwrap();
 
     let mut compiler_options = shaderc::CompileOptions::new().unwrap();
-    compiler_options.set_optimization_level(OptimizationLevel::Performance);
 
     let compiled_shader = compiler
-        .compile_into_spirv(glsl, shader_kind, "unnamed", "main", Some(&compiler_options))
+        .compile_into_spirv(
+            glsl, shader_kind, "unnamed", "main", Some(&compiler_options))
         .expect("Failed to compile shader");
 
     compiled_shader.as_binary().to_vec()

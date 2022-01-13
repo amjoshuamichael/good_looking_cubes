@@ -25,3 +25,9 @@ pub static POST_PROCESSING: &str =
         include_str!("version_header.glsl"),
         include_str!("post_processing.glsl"),
     );
+
+pub static WORLD_DRAW: &str =
+    concat!(
+        include_str!("version_header.glsl"),
+        include_str!("world_draw.glsl"),
+    );

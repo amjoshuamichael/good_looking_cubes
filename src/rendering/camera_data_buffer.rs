@@ -11,7 +11,7 @@ pub struct CameraData {
 impl DataForBuffer for CameraData {
     fn new() -> Self {
         Self {
-            pos: [1.0, 0.0, 1.0, 1.0],
+            pos: [1.0, 0.0, -1.0, 1.0],
             dir: [1.0, 0.0, 0.0, 1.0]
         }
     }
