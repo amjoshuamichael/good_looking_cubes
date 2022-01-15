@@ -194,15 +194,6 @@ pub fn render_draw<B: gfx_hal::Backend>(
             camera_data_buffer.bytes(),
         );
 
-        command_buffer.push_graphics_constants(
-            temp_pipeline_layout,
-            world_data_buffer.shader_stage,
-            32,
-            world_data_buffer.bytes(),
-        );
-
-
-
         command_buffer.draw(0..6, 0..1);
         command_buffer.end_render_pass();
 

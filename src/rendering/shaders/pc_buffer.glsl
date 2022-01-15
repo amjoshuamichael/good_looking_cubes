@@ -8,7 +8,7 @@ layout(push_constant) uniform PushConstants {
 layout(location = 0) in vec4 vertex_color;
 layout(location = 0) out vec4 fragment_color;
 
-layout(set = 0, binding = 0, std140) uniform WorldBuffer {
+layout(set = 0, binding = 0) uniform WorldBuffer {
     int data[size * size * size];
 } world;
 

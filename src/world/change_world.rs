@@ -8,6 +8,8 @@ use super::size;
 pub fn change_world(
     mut world_data_buffer: ResMut<DataBuffer<WorldData>>
 ) {
+    return;
+
     let mut rng = thread_rng();
 
     let color: u32 = rng.gen();

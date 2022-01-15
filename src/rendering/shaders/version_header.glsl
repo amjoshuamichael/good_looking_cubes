@@ -1,4 +1,4 @@
 #version 450
 #pragma optionNV (unroll all)
 
-const int size = 24;
+const int size = 32;

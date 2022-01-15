@@ -22,7 +22,7 @@ impl DataForBuffer for WorldData {
             0b10000000100000001000000010000000,
         ];
 
-        let mut output = [0; 512];
+        let mut output = [0; (size * size * size) as usize];
 
         let mut rng = thread_rng();
 
@@ -33,24 +33,24 @@ impl DataForBuffer for WorldData {
         //     output[place] = color;
         // // }
         //
-        for x in 0..8 {
-            for z in 0..8 {
+        for x in 0..size {
+            for z in 0..size {
                 let color: u32 = *colors.choose(&mut rng).unwrap();
 
-                output[x + z * 64] = color;
+                output[(x + z * size * size) as usize] = color;
             }
         }
 
-        for y in 0..8 {
-            for z in 0..8 {
+        for y in 0..size {
+            for z in 0..size {
                 let color: u32 = *colors.choose(&mut rng).unwrap();
 
-                output[y * 8 + z * 64] = color;
+                output[(y * size + z * size * size) as usize] = color;
             }
         }
 
         WorldData {
-            data: [0; (size * size * size) as usize],
+            data: output,
         }
     }
 }

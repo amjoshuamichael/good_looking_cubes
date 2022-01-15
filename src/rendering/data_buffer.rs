@@ -38,8 +38,8 @@ impl<T: DataForBuffer + Pod> DataBuffer<T> {
 
     pub unsafe fn bytes_8(&self) -> &[u8] {
         let size_in_bytes = std::mem::size_of::<T>();
-        let size_in_u32s = size_in_bytes / std::mem::size_of::<u8>();
+        let size_in_u8s = size_in_bytes / std::mem::size_of::<u8>();
         let start_ptr = &self.data as *const T as *const u8;
-        std::slice::from_raw_parts(start_ptr, size_in_u32s)
+        std::slice::from_raw_parts(start_ptr, size_in_u8s)
     }
 }

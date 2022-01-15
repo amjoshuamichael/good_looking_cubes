@@ -270,7 +270,7 @@ fn create_window(
 
         let memory = device
             .allocate_memory(
-                MemoryTypeId(3),
+                MemoryTypeId(0),
                 device.get_buffer_requirements(&buffer).size,
             )
             .expect("failed to allocate memory for world data buffer");
@@ -370,7 +370,7 @@ fn create_window(
                         ty: pso::DescriptorType::Buffer {
                             ty: BufferDescriptorType::Uniform,
                             format: BufferDescriptorFormat::Structured {
-                                dynamic_offset: true,
+                                dynamic_offset: false,
                             },
                         },
                         count: 1,
@@ -389,7 +389,7 @@ fn create_window(
                     ty: pso::DescriptorType::Buffer {
                         ty: BufferDescriptorType::Uniform,
                         format: BufferDescriptorFormat::Structured {
-                            dynamic_offset: true,
+                            dynamic_offset: false,
                         },
                     },
                     count: 1,
@@ -429,7 +429,6 @@ fn create_window(
                 world_set_layout,
             ], &[
                 camera_data_buffer.layout(),
-                world_data_buffer.layout(),
             ])
             .expect("Out of memory");
 
