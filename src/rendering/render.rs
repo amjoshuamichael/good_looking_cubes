@@ -3,6 +3,7 @@ use std::io::Read;
 use bevy::prelude::*;
 use bevy::app::Events;
 use bevy::render::render_resource::Buffer;
+use gfx_hal::buffer::SubRange;
 use gfx_hal::device::BindError;
 use time::Instant;
 use gfx_hal::prelude::*;
@@ -28,9 +29,11 @@ pub fn render_draw<B: gfx_hal::Backend>(
     let res: &mut Resources<_> = &mut resource_holder.0;
     let render_pass = &res.render_passes[0];
     let temp_pipeline_layout = &res.pipeline_layouts[0];
-    let temp_pipeline = &res.pipelines[0];
+    let temp_pipeline = &res.render_pipelines[0];
+    let temp_image_view = &res.image_views[0];
     let surface_pipeline_layout = &res.pipeline_layouts[1];
-    let surface_pipeline = &res.pipelines[1];
+    let surface_pipeline = &res.render_pipelines[1];
+    let world_buffer = &res.buffers[0];
 
     unsafe {
         // We refuse to wait more than a second, to avoid hanging.
@@ -96,7 +99,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
         res.device
             .create_framebuffer(
                 render_pass,
-                vec![&res.image_view],
+                vec![temp_image_view],
                 Extent {
                     width: render_info.render_resolution.0,
                     height: render_info.render_resolution.1,
@@ -162,6 +165,15 @@ pub fn render_draw<B: gfx_hal::Backend>(
         command_buffer.set_viewports(0, &[low_res_viewport.clone()]);
         command_buffer.set_scissors(0, &[low_res_viewport.rect]);
 
+        command_buffer.bind_graphics_descriptor_sets(&temp_pipeline_layout, 0, Some(&res.description_sets[1]), &[]);
+
+
+        command_buffer.update_buffer(
+            world_buffer,
+            0,
+            world_data_buffer.bytes_8(),
+        );
+
         command_buffer.begin_render_pass(
             render_pass,
             &temp_framebuffer,
@@ -189,11 +201,12 @@ pub fn render_draw<B: gfx_hal::Backend>(
             world_data_buffer.bytes(),
         );
 
-        command_buffer.draw(0..6, 0..1);
 
+
+        command_buffer.draw(0..6, 0..1);
         command_buffer.end_render_pass();
 
-        command_buffer.bind_graphics_descriptor_sets(&surface_pipeline_layout, 0, Some(&res.description_set), &[]);
+        command_buffer.bind_graphics_descriptor_sets(&surface_pipeline_layout, 0, Some(&res.description_sets[0]), &[]);
 
         command_buffer.set_viewports(0, &[full_viewport.clone()]);
         command_buffer.set_scissors(0, &[full_viewport.rect]);
@@ -209,7 +222,6 @@ pub fn render_draw<B: gfx_hal::Backend>(
             }],
             SubpassContents::Inline,
         );
-
         command_buffer.bind_graphics_pipeline(surface_pipeline);
 
         command_buffer.draw(0..6, 0..1);
@@ -241,12 +253,3 @@ pub fn render_draw<B: gfx_hal::Backend>(
         res.device.destroy_framebuffer(surface_framebuffer);
     }
 }
-
-// command_buffer.blit_image(
-// &res.image_view,
-// Layout::ShaderReadOnlyOptimal,
-// &surface_image,
-// Layout::General,
-// Filter::Nearest,
-// 0..1;
-// );

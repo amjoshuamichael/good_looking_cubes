@@ -1,11 +1,12 @@
 use crate::rendering::data_buffer::*;
 use rand::prelude::*;
 use rand::seq::SliceRandom;
+use super::size;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct WorldData {
-    data: [u32; 512],
+    pub data: [u32; (size * size * size) as usize],
 }
 
 impl DataForBuffer for WorldData {
@@ -30,8 +31,8 @@ impl DataForBuffer for WorldData {
         //     let place = rng.gen_range(0..512);
         //
         //     output[place] = color;
-        // }
-
+        // // }
+        //
         for x in 0..8 {
             for z in 0..8 {
                 let color: u32 = *colors.choose(&mut rng).unwrap();
@@ -49,7 +50,7 @@ impl DataForBuffer for WorldData {
         }
 
         WorldData {
-            data: output,
+            data: [0; (size * size * size) as usize],
         }
     }
 }

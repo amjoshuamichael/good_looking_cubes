@@ -11,7 +11,7 @@ vec4 color_from(uint color) {
     uint b = color << 16 >> 24;
     uint a = color << 24 >> 24;
 
-    return vec4(float(r), float(g), float(b), float(a));
+    return vec4(float(r), float(g), float(b), float(a)) / 256.0;
 }
 
 hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
@@ -68,7 +68,7 @@ hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
 }
 
 void main() {
-    uint num_samples = 100;
+    uint num_samples = 400;
     int rand_seed = setup_rand(vertex_color.xy);
 
     float fov = 1.0;
@@ -89,15 +89,23 @@ void main() {
         return;
     }
 
+    initial_hit.pos += initial_hit.normal * 0.001;
+
+    vec3 hit_normal_mask = vec3(equal(initial_hit.normal, vec3(0.0))) * sum_of_dimensions(initial_hit.normal);
     vec4 shadow = vec4(0.0);
 
     int rand_x = rand(rand_seed);
     int rand_y = rand(rand_seed);
     int rand_z = rand(rand_seed);
 
-    for (uint i = 0; i < num_samples; i = i + 1) {
-        vec3 to_light = normalize( initial_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * 0.5);
-        hit to_light_hit = hit_in_direction(initial_hit.pos, to_light, 30);
+    // randomize the initial vector a little more
+    rand_x = rand(rand_z);
+    rand_y = rand(rand_y);
+    rand_z = rand(rand_x);
+
+    for (uint i = 0; i < num_samples; i++) {
+        vec3 to_light = normalize(initial_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * hit_normal_mask * 4.0);
+        hit to_light_hit = hit_in_direction(initial_hit.pos, to_light, 20);
 
         if (to_light_hit.unit_code == 0) {
             shadow += albedo_color;
@@ -108,8 +116,6 @@ void main() {
         rand_z = rand(rand_x);
     }
 
-    shadow = shadow / float(num_samples);
-
-    fragment_color = shadow;
+    fragment_color = shadow / num_samples;
 }
 

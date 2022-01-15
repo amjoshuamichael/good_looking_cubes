@@ -9,11 +9,12 @@ use gfx_hal::{
 };
 use gfx_hal::adapter::Adapter;
 use gfx_hal::format::Format;
-use gfx_hal::pso::{ImageDescriptorType, ShaderStageFlags};
+use gfx_hal::pso::{BufferDescriptorType, ImageDescriptorType, ShaderStageFlags};
 use gfx_hal::queue::QueueGroup;
 use shaderc::ShaderKind;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use bytemuck::Pod;
+use gfx_hal::buffer::SubRange;
 use time::Instant;
 use shaderc::{CompileOptions, OptimizationLevel};
 use crate::rendering::bevy_to_winit;
@@ -30,13 +31,17 @@ pub struct Resources<B: gfx_hal::Backend> {
     pub device: B::Device,
     pub render_passes: Vec<B::RenderPass>,
     pub pipeline_layouts: Vec<B::PipelineLayout>,
-    pub pipelines: Vec<B::GraphicsPipeline>,
+    pub render_pipelines: Vec<B::GraphicsPipeline>,
+    pub compute_pipelines: Vec<B::ComputePipeline>,
+    pub image_views: Vec<B::ImageView>,
+    pub description_sets: Vec<B::DescriptorSet>,
+    pub samplers: Vec<B::Sampler>,
+    pub buffers: Vec<B::Buffer>,
+    pub buffer_views: Vec<B::BufferView>,
+    pub memory: Vec<B::Memory>,
     pub command_pool: B::CommandPool,
     pub submission_complete_fence: B::Fence,
     pub rendering_complete_semaphore: B::Semaphore,
-    pub image_view: B::ImageView,
-    pub description_set: B::DescriptorSet,
-    pub sampler: B::Sampler,
 }
 
 pub struct ResourceHolder<B: gfx_hal::Backend>(pub ManuallyDrop<Resources<B>>);
@@ -48,33 +53,34 @@ impl<B: gfx_hal::Backend> Drop for ResourceHolder<B> {
                 instance,
                 mut surface,
                 device,
-                command_pool,
                 render_passes,
                 pipeline_layouts,
-                pipelines,
+                render_pipelines,
+                compute_pipelines,
+                image_views,
+                description_sets,
+                samplers,
+                buffers,
+                buffer_views,
+                memory,
+                command_pool,
                 submission_complete_fence,
                 rendering_complete_semaphore,
-                image_view,
-                description_set,
-                sampler,
             } = ManuallyDrop::take(&mut self.0);
 
             device.destroy_semaphore(rendering_complete_semaphore);
             device.destroy_fence(submission_complete_fence);
-            for pipeline in pipelines {
-                device.destroy_graphics_pipeline(pipeline);
-            }
-            for pipeline_layout in pipeline_layouts {
-                device.destroy_pipeline_layout(pipeline_layout);
-            }
-            for render_pass in render_passes {
-                device.destroy_render_pass(render_pass);
-            }
+            for pipeline in render_pipelines { device.destroy_graphics_pipeline(pipeline); }
+            for pipeline in compute_pipelines { device.destroy_compute_pipeline(pipeline); }
+            for layout in pipeline_layouts { device.destroy_pipeline_layout(layout); }
+            for pass in render_passes { device.destroy_render_pass(pass); }
+            for view in image_views { device.destroy_image_view(view); }
+            for sampler in samplers { device.destroy_sampler(sampler); }
+            for buffer in buffers { device.destroy_buffer(buffer); }
+            for view in buffer_views { device.destroy_buffer_view(view); }
             device.destroy_command_pool(command_pool);
-            device.destroy_sampler(sampler);
             surface.unconfigure_swapchain(&device);
             instance.destroy_surface(surface);
-            //TODO: dispose of image_view memory
         }
     }
 }
@@ -206,21 +212,13 @@ fn create_window(
                     resolves: &[],
                     preserves: &[],
                 }
-            ], &[
-                SubpassDependency {
-                    passes: Some(0)..Some(1),
-                    stages: PipelineStage::COLOR_ATTACHMENT_OUTPUT..PipelineStage::COLOR_ATTACHMENT_OUTPUT,
-                    accesses: Access::empty()
-                        ..(Access::COLOR_ATTACHMENT_READ | Access::COLOR_ATTACHMENT_WRITE),
-                    flags: Dependencies::BY_REGION,
-                }
-            ])
+            ], &[])
             .expect("Out of memory")
     };
 
     let (width, height) = (400, 400);
 
-    let (image_view) = unsafe {
+    let image_view = unsafe {
         use gfx_hal::image::{Kind, Tiling, Usage, ViewCapabilities, ViewKind, SubresourceRange, Size};
         use gfx_hal::format::Swizzle;
         use gfx_hal::MemoryTypeId;
@@ -259,11 +257,40 @@ fn create_window(
         view
     };
 
+    let (world_buffer, world_memory) = unsafe {
+        use gfx_hal::buffer::Usage;
+        use gfx_hal::MemoryTypeId;
+
+        let mut buffer = device
+            .create_buffer(
+                DataBuffer::<WorldData>::size() as u64,
+                Usage::all(),
+            )
+            .expect("failed to create world data buffer");
+
+        let memory = device
+            .allocate_memory(
+                MemoryTypeId(3),
+                device.get_buffer_requirements(&buffer).size,
+            )
+            .expect("failed to allocate memory for world data buffer");
+
+        device
+            .bind_buffer_memory(
+                &memory,
+                0,
+                &mut buffer,
+            )
+            .expect("failed to bind buffer memory");
+
+        (buffer, memory)
+    };
+
     let vertex_shader = shaders::VERTEX_CANVAS;
     let fragment_shader = shaders::VOXEL_RENDER;
     let post_processing_shader = shaders::POST_PROCESSING;
 
-    let (set_layout, description_set, sampler) = unsafe {
+    let (temp_set_layout, temp_description_set, temp_sampler) = unsafe {
         use gfx_hal::pso;
         use gfx_hal::image;
 
@@ -287,7 +314,7 @@ fn create_window(
                 ],
                 &[],
             )
-            .expect("Can't create descriptor set layout");
+            .expect("Ran out of memory creating descriptor set layout");
 
         let mut desc_pool = device.create_descriptor_pool(
                 1, // sets
@@ -312,7 +339,6 @@ fn create_window(
                 .create_sampler(&image::SamplerDesc::new(image::Filter::Nearest, image::WrapMode::Clamp))
                 .unwrap();
 
-        println!("we are about to write descriptor sets...");
         device.write_descriptor_sets(vec![
             pso::DescriptorSetWrite {
                 set: &desc_set,
@@ -327,16 +353,81 @@ fn create_window(
                 descriptors: Some(pso::Descriptor::Sampler(&sampler)),
             },
         ]);
-        println!("we have written the descriptor sets!");
 
         (set_layout, desc_set, sampler)
+    };
+
+    let (world_set_layout, world_description_set) = unsafe {
+        use gfx_hal::pso;
+        use gfx_hal::pso::BufferDescriptorFormat;
+        use gfx_hal::image;
+
+        let set_layout =
+            device.create_descriptor_set_layout(
+                &[
+                    pso::DescriptorSetLayoutBinding {
+                        binding: 0,
+                        ty: pso::DescriptorType::Buffer {
+                            ty: BufferDescriptorType::Uniform,
+                            format: BufferDescriptorFormat::Structured {
+                                dynamic_offset: true,
+                            },
+                        },
+                        count: 1,
+                        stage_flags: ShaderStageFlags::FRAGMENT,
+                        immutable_samplers: false,
+                    },
+                ],
+                &[],
+            )
+                .expect("Can't create descriptor set layout");
+
+        let mut desc_pool = device.create_descriptor_pool(
+            1, // sets
+            &[
+                pso::DescriptorRangeDesc {
+                    ty: pso::DescriptorType::Buffer {
+                        ty: BufferDescriptorType::Uniform,
+                        format: BufferDescriptorFormat::Structured {
+                            dynamic_offset: true,
+                        },
+                    },
+                    count: 1,
+                },
+            ],
+            gfx_hal::pso::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET,
+        )
+            .expect("Can't create descriptor pool");
+
+        let desc_set = desc_pool
+            .allocate_set(&set_layout)
+            .expect("unable to allocate set layout for description pool");
+
+        device.write_descriptor_sets(vec![
+            pso::DescriptorSetWrite {
+                set: &desc_set,
+                binding: 0,
+                array_offset: 0,
+                descriptors: Some(pso::Descriptor::Buffer(
+                    &world_buffer,
+                    SubRange {
+                        offset: 0,
+                        size: None,
+                    },
+                )),
+            },
+        ]);
+
+        (set_layout, desc_set)
     };
 
     let (temp_pipeline_layout, surface_pipeline_layout) = unsafe {
         use gfx_hal::pso::ShaderStageFlags;
 
         let temp = device
-            .create_pipeline_layout(&[], &[
+            .create_pipeline_layout(&[
+                world_set_layout,
+            ], &[
                 camera_data_buffer.layout(),
                 world_data_buffer.layout(),
             ])
@@ -344,7 +435,7 @@ fn create_window(
 
         let surface = device
             .create_pipeline_layout(&[
-                set_layout,
+                temp_set_layout,
             ], &[])
             .expect("Out of memory");
 
@@ -380,15 +471,19 @@ fn create_window(
             instance,
             surface,
             device,
-            command_pool,
             render_passes: vec![render_pass],
             pipeline_layouts: vec![temp_pipeline_layout, surface_pipeline_layout],
-            pipelines: vec![temp_pipeline, surface_pipeline],
+            render_pipelines: vec![temp_pipeline, surface_pipeline],
+            compute_pipelines: vec![],
+            image_views: vec![image_view],
+            description_sets: vec![temp_description_set, world_description_set],
+            samplers: vec![temp_sampler],
+            buffers: vec![world_buffer],
+            buffer_views: vec![],
+            memory: vec![world_memory],
+            command_pool,
             submission_complete_fence,
             rendering_complete_semaphore,
-            image_view,
-            description_set,
-            sampler,
         }));
 
     let mut render_info = RenderInfo {
@@ -402,7 +497,6 @@ fn create_window(
     app.insert_resource(camera_data_buffer);
     app.insert_resource(world_data_buffer);
 
-    println!("about to enter event loop");
     // Note that this takes a `move` closure. This means it will take ownership
     // over any resources referenced within. It also means they will be dropped
     // only when the application is quit.

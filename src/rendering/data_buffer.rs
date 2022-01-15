@@ -25,6 +25,7 @@ impl<T: DataForBuffer + Pod> DataBuffer<T> {
     }
 
     pub fn layout(&self) -> (ShaderStageFlags, Range<u32>) {
+        println!("{}", Self::size());
         (self.shader_stage, 0..Self::size())
     }
 
@@ -32,6 +33,13 @@ impl<T: DataForBuffer + Pod> DataBuffer<T> {
         let size_in_bytes = std::mem::size_of::<T>();
         let size_in_u32s = size_in_bytes / std::mem::size_of::<u32>();
         let start_ptr = &self.data as *const T as *const u32;
+        std::slice::from_raw_parts(start_ptr, size_in_u32s)
+    }
+
+    pub unsafe fn bytes_8(&self) -> &[u8] {
+        let size_in_bytes = std::mem::size_of::<T>();
+        let size_in_u32s = size_in_bytes / std::mem::size_of::<u8>();
+        let start_ptr = &self.data as *const T as *const u8;
         std::slice::from_raw_parts(start_ptr, size_in_u32s)
     }
 }

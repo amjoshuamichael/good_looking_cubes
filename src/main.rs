@@ -32,6 +32,11 @@ fn main() {
                 .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                 .with_system(input_test)
         )
+        .add_system_set(
+            SystemSet::new()
+                .with_run_criteria(FixedTimestep::step(0.4))
+                .with_system(world::change_world::change_world)
+        )
         // .add_system_set(
         //     SystemSet::new()
         //         .with_run_criteria(FixedTimestep::step(RENDER_TIME_STEP))
@@ -46,33 +51,40 @@ fn input_test(
     keyboard_input: Res<Input<KeyCode>>,
     mut camera_data_buffer: ResMut<DataBuffer<CameraData>>
 ) {
+    let mut move_speed = 0.02;
+
+    if keyboard_input.pressed(KeyCode::Return) {
+        move_speed = 0.1;
+    }
+
     if keyboard_input.pressed(KeyCode::A) {
-        camera_data_buffer.data.pos[0] -= 0.02;
+        camera_data_buffer.data.pos[0] -= move_speed;
     } else if keyboard_input.pressed(KeyCode::D) {
-        camera_data_buffer.data.pos[0] += 0.02;
+        camera_data_buffer.data.pos[0] += move_speed;
     }
 
     if keyboard_input.pressed(KeyCode::LShift) {
-        camera_data_buffer.data.pos[1] -= 0.02;
+        camera_data_buffer.data.pos[1] -= move_speed;
     } else if keyboard_input.pressed(KeyCode::Space) {
-        camera_data_buffer.data.pos[1] += 0.02;
+        camera_data_buffer.data.pos[1] += move_speed;
     }
 
     if keyboard_input.pressed(KeyCode::S) {
-        camera_data_buffer.data.pos[2] -= 0.02;
+        camera_data_buffer.data.pos[2] -= move_speed;
     } else if keyboard_input.pressed(KeyCode::W) {
-        camera_data_buffer.data.pos[2] += 0.02;
+        camera_data_buffer.data.pos[2] += move_speed;
     }
 
     if keyboard_input.pressed(KeyCode::T) {
-        camera_data_buffer.data.dir[2] -= 0.02;
+        camera_data_buffer.data.dir[2] -= move_speed;
     } else if keyboard_input.pressed(KeyCode::Y) {
-        camera_data_buffer.data.dir[2] += 0.02;
+        camera_data_buffer.data.dir[2] += move_speed;
     }
 
     if keyboard_input.pressed(KeyCode::Q) {
-        camera_data_buffer.data.dir[0] -= 0.02;
+        camera_data_buffer.data.dir[0] -= move_speed;
     } else if keyboard_input.pressed(KeyCode::E) {
-        camera_data_buffer.data.dir[0] += 0.02;
+        camera_data_buffer.data.dir[0] += move_speed;
     }
 }
+
