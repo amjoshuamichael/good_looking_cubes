@@ -69,7 +69,6 @@ hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
 
 void main() {
     uint num_samples = 100;
-    int rand_seed = setup_rand(vertex_color.xy);
 
     float fov = 1.0;
 
@@ -81,6 +80,8 @@ void main() {
         )
     );
     vec3 ro = vec3(pc.camera_pos.x, pc.camera_pos.y, pc.camera_pos.z);
+
+    int rand_seed = setup_rand(rd.xz + rd.yy + ro.xz + ro.yy);
 
     hit initial_hit = hit_in_direction(ro, rd, 400);
     vec4 albedo_color = flatten_color(color_from(initial_hit.unit_code));

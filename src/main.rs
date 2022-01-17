@@ -19,9 +19,6 @@ const PHYSICS_TIME_STEP: f64 = 1.0 / 60.0;
 fn main() {
     env_logger::init();
 
-    let vox_data = vox_format::from_file("assets/models/chr_sword.vox").unwrap();
-    println!("{:#?}", vox_data);
-
     App::new()
         .add_event::<rendering::render::RenderEvent>()
         .add_plugin(bevy::core::CorePlugin::default())
@@ -38,11 +35,12 @@ fn main() {
                 .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                 .with_system(input_test)
         )
-        .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
-                .with_system(world::change_world::change_world)
-        )
+        // .add_system_set(
+        //     SystemSet::new()
+        //         .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
+        //         .with_system(world::change_world::change_world)
+        // )
+        .add_startup_system(world::change_world::load_vox)
         .run();
 }
 
