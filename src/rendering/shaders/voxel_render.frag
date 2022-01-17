@@ -68,7 +68,7 @@ hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
 }
 
 void main() {
-    uint num_samples = 400;
+    uint num_samples = 100;
     int rand_seed = setup_rand(vertex_color.xy);
 
     float fov = 1.0;
@@ -99,9 +99,12 @@ void main() {
     int rand_z = rand(rand_seed);
 
     // randomize the initial vector a little more
-    rand_x = rand(rand_z);
-    rand_y = rand(rand_y);
-    rand_z = rand(rand_x);
+    for (float n = 0.0; n < 4.0; n++) {
+        rand_x = rand(rand_z);
+        rand_y = rand(rand_y);
+        rand_z = rand(rand_x);
+    }
+
 
     for (uint i = 0; i < num_samples; i++) {
         vec3 to_light = normalize(initial_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * hit_normal_mask * 4.0);
@@ -116,6 +119,7 @@ void main() {
         rand_z = rand(rand_x);
     }
 
-    fragment_color = shadow / num_samples;
+    fragment_color = shadow / float(num_samples);
+//    fragment_color = vec4(normalize(vec3(rand_x, rand_y, rand_z)), 1.0);
 }
 

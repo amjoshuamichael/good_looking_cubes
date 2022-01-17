@@ -1,9 +1,12 @@
 use bevy::{
-    prelude::*,
-    core::FixedTimestep
+    core::FixedTimestep,
+    prelude::*
 };
-use rendering::create_window::CtklrWindowPlugin;
+
 use debug::CtklrDebugPlugin;
+use rendering::CtklrRenderPlugin;
+use world::CtklrWorldPlugin;
+
 use crate::rendering::camera_data_buffer::CameraData;
 use crate::rendering::data_buffer::DataBuffer;
 
@@ -12,10 +15,12 @@ mod world;
 mod debug;
 
 const PHYSICS_TIME_STEP: f64 = 1.0 / 60.0;
-const RENDER_TIME_STEP: f64 = 1.0 / 30.0;
 
 fn main() {
     env_logger::init();
+
+    let vox_data = vox_format::from_file("assets/models/chr_sword.vox").unwrap();
+    println!("{:#?}", vox_data);
 
     App::new()
         .add_event::<rendering::render::RenderEvent>()
@@ -25,8 +30,9 @@ fn main() {
         .add_plugin(bevy::input::InputPlugin::default())
         .add_plugin(bevy::asset::AssetPlugin::default())
         .add_plugin(bevy::scene::ScenePlugin::default())
-        .add_plugin(CtklrWindowPlugin::default())
+        .add_plugin(CtklrRenderPlugin::default())
         .add_plugin(CtklrDebugPlugin::default())
+        .add_plugin(CtklrWorldPlugin::default())
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
@@ -34,18 +40,11 @@ fn main() {
         )
         .add_system_set(
             SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(0.4))
+                .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                 .with_system(world::change_world::change_world)
         )
-        // .add_system_set(
-        //     SystemSet::new()
-        //         .with_run_criteria(FixedTimestep::step(RENDER_TIME_STEP))
-        //         .with_system(render)
-        // )
         .run();
 }
-
-use futures::executor::block_on;
 
 fn input_test(
     keyboard_input: Res<Input<KeyCode>>,

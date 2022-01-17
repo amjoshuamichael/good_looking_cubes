@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy::app::Events;
+
 use crate::rendering::render::RenderEvent;
 
 pub fn log_framerate(

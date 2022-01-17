@@ -12,7 +12,7 @@ impl DataForBuffer for CameraData {
     fn new() -> Self {
         Self {
             pos: [1.0, 0.0, 1.0, 1.0],
-            dir: [1.0, 0.0, 0.0, 1.0]
+            dir: [-1.0, 0.0, 0.0, 1.0]
         }
     }
 }

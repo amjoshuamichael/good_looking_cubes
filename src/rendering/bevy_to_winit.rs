@@ -24,6 +24,7 @@ pub fn convert_element_state(element_state: winit::event::ElementState) -> Eleme
     }
 }
 
+#[allow(dead_code)]
 pub fn convert_mouse_button(mouse_button: winit::event::MouseButton) -> MouseButton {
     match mouse_button {
         winit::event::MouseButton::Left => MouseButton::Left,
@@ -33,6 +34,7 @@ pub fn convert_mouse_button(mouse_button: winit::event::MouseButton) -> MouseBut
     }
 }
 
+#[allow(dead_code)]
 pub fn convert_touch_input(
     touch_input: winit::event::Touch,
     location: winit::dpi::LogicalPosition<f32>,
