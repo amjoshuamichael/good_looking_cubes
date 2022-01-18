@@ -7,5 +7,7 @@ layout(set = 0, binding = 1) uniform sampler u_sampler;
 
 
 void main() {
-    fragment_color = texture(sampler2D(u_texture, u_sampler), vertex_color.xy / 2.0 + vec2(0.5));
+    vec4 color = texture(sampler2D(u_texture, u_sampler), vertex_color.xy / 2.0 + vec2(0.5));
+
+    fragment_color = color;
 }

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rand::prelude::*;
 use crate::{CameraData, DataBuffer};
 
-use crate::world::{CHUNK_SIZE, CHUNK_VOL, CHUNKS_X, CHUNKS_Y, CHUNKS_Z, ChunkUpdate};
+use crate::world::{CHUNK_SIZE, CHUNK_VOL, CHUNKS_X, CHUNKS_Y, CHUNKS_Z, ChunkUpdate, parse_pec};
 
 fn as_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
     ((a as u32) << 24) +
@@ -18,7 +18,8 @@ pub fn load_vox(
 ) {
     let mut chunks_to_load: Vec<UVec3> = Vec::new();
 
-    let vox_data = vox_format::from_file("assets/models/monu10.vox").unwrap();
+    let vox_data = vox_format::from_file("assets/models/monu16.vox").unwrap();
+    let vox_pec = parse_pec::parse_pec(include_str!("../../assets/models/monu16.pec"));
 
     for v in &vox_data.models[0].voxels {
         let chunk_pos = UVec3::new(v.point.x as u32 / 16, v.point.z as u32 / 16,  v.point.y as u32 / 16);
@@ -34,13 +35,15 @@ pub fn load_vox(
             let chunk_pos = UVec3::new(v.point.x as u32 / 16, v.point.z as u32 / 16,  v.point.y as u32 / 16);
             if c.x != chunk_pos.x || c.y != chunk_pos.y || c.z != chunk_pos.z { continue; }
 
+            let color_info = *vox_pec.get(&v.color_index.0).unwrap_or(&0);
+
             let color = (v.color_index.0 as u32) << 24;
 
             new_data[
                 v.point.x as usize % CHUNK_SIZE +
                 v.point.z as usize % CHUNK_SIZE * CHUNK_SIZE +
                 v.point.y as usize % CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
-                ] = color;
+                ] = color + color_info + 1;
         }
 
         world_changes.push(

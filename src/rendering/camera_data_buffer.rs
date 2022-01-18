@@ -8,6 +8,8 @@ pub struct CameraData {
     pub dir: [f32; 4],
 
     pub palette: [[f32; 4]; 256],
+
+    pub text_to_show: [u32; 256],
 }
 
 impl Default for CameraData {
@@ -15,7 +17,7 @@ impl Default for CameraData {
         let palette = {
             let mut palette = [[0.0; 4]; 256];
 
-            let decoder = png::Decoder::new(File::open("assets/palettes/basic.png").unwrap());
+            let decoder = png::Decoder::new(File::open("assets/palettes/monu16.png").unwrap());
             let mut reader = decoder.read_info().unwrap();
             let mut buf = vec![0; reader.output_buffer_size()];
             let info = reader.next_frame(&mut buf).unwrap();
@@ -35,12 +37,11 @@ impl Default for CameraData {
             palette
         };
 
-        println!("THE PALETTE IS: {:#?}", palette[0]);
-
         CameraData {
             pos: [0.0, 0.0, 0.0, 0.0],
             dir: [0.0, 0.0, 0.0, 0.0],
             palette,
+            text_to_show: [0; 256],
         }
     }
 }

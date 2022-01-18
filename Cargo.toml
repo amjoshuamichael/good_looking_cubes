@@ -16,6 +16,7 @@ futures = "0.3.19"
 time = "0.3.5"
 vox-format = "0.1.0"
 png = "0.17.2"
+unwrap = "1.2.1"
 
 [dependencies.bevy]
 path = "bevy"

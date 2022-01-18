@@ -7,6 +7,7 @@ use crate::{App, FixedTimestep, PHYSICS_TIME_STEP};
 use crate::rendering::resources::RenderInfo;
 
 pub mod change_world;
+mod parse_pec;
 
 pub const CHUNKS_X: usize = 16;
 pub const CHUNKS_Y: usize = 16;

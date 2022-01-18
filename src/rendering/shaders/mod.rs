@@ -15,6 +15,7 @@ pub const VOXEL_RENDER: &str =
         include_str!("vector_utils.glsl"),
         include_str!("random.glsl"),
         include_str!("index_world.glsl"),
+        include_str!("extract_color.glsl"),
         include_str!("voxel_render.frag"),
     );
 

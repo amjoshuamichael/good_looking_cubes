@@ -1,3 +1,8 @@
+const float total_samples = 100;
+const float highlight_samples = 75;
+const float highlight_sensitivity = 0.99;
+const uint bounce_dist = 20;
+
 struct hit {
     vec3 pos;
     vec3 normal;
@@ -5,10 +10,6 @@ struct hit {
 
     uint unit_code;
 };
-
-vec4 color_from(uint color) {
-    return pc.palette[color >> 24];
-}
 
 hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
     vec3 check_point = floor(ro);
@@ -63,6 +64,50 @@ hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
     return hit(vec3(0.0), vec3(0.0), 0, 0);
 }
 
+vec4 sample_at_hit(hit the_hit, float num_samples) {
+    if (is_air(the_hit.unit_code)) {
+        return mix(vec4(1.0), vec4(vertex_color.xy, 1.0, 1.0), 0.5);
+    }
+
+    // 977 is a number that seemed to look good after i tried a bunch of prime numbers
+    int rand_x = rand(int(the_hit.pos.x * the_hit.pos.y * the_hit.pos.z * 977) % 256 + 1);
+    int rand_y = rand(rand_x);
+    int rand_z = rand(rand_y);
+
+    vec4 albedo_color = color_from(the_hit.unit_code);
+    float emission_amount = 1 + emission_from(the_hit.unit_code) * 0.5;
+    vec3 hit_normal_mask = vec3(equal(the_hit.normal, vec3(0.0))) * sum_of_dimensions(the_hit.normal);
+    vec3 start_pos = the_hit.pos + the_hit.normal * 0.001;
+    float light_amount = 0.0;
+
+    vec4 color_out = vec4(0.0);
+
+    for (float i = 0; i < num_samples; i++) {
+        vec3 to_light = normalize(the_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * hit_normal_mask * 4.0);
+        hit to_light_hit = hit_in_direction(the_hit.pos, to_light, bounce_dist);
+        float hit_dist = length(the_hit.pos - to_light_hit.pos) / float(bounce_dist);
+
+        if (to_light_hit.unit_code == 0) {
+            color_out += albedo_color * emission_amount;
+            light_amount++;
+        } else if (emission_from(to_light_hit.unit_code) > 0) {
+            color_out += emission_from(to_light_hit.unit_code) * color_from(to_light_hit.unit_code) * 1.5 * (1 - hit_dist);
+        } else {
+            color_out += albedo_color * hit_dist;
+        }
+
+        if (light_amount / i > highlight_sensitivity && i > highlight_samples) {
+            return albedo_color * emission_amount;
+        }
+
+        rand_x = rand(rand_z);
+        rand_y = rand(rand_x);
+        rand_z = rand(rand_y);
+    }
+
+    return color_out / num_samples;
+}
+
 void main() {
     float fov = 1.0;
 
@@ -75,65 +120,19 @@ void main() {
     );
     vec3 ro = vec3(pc.camera_pos.x, pc.camera_pos.y, pc.camera_pos.z);
 
-    int rand_seed = setup_rand(rd.xz + rd.yy + ro.xz + ro.yy);
-
     hit initial_hit = hit_in_direction(ro, rd, 400);
-    vec4 albedo_color = color_from(initial_hit.unit_code);
-    if (albedo_color.xyz == vec3(0.0, 0.0, 0.0)) {
-        fragment_color = mix(vec4(1.0), vec4(vertex_color.xy, 1.0, 1.0), 0.5);
-        return;
+
+    float gloss = metallic_from(initial_hit.unit_code);
+
+    if (gloss > 0) {
+        vec4 base_color = sample_at_hit(initial_hit, 100 * (1 - gloss));
+
+        vec3 reflected_dir = reflect(rd, initial_hit.normal);
+        hit reflected_hit = hit_in_direction(initial_hit.pos, reflected_dir, 400);
+        vec4 reflected_color = sample_at_hit(reflected_hit, 100 * gloss);
+
+        fragment_color = mix(base_color, reflected_color, gloss);
+    } else {
+        fragment_color = sample_at_hit(initial_hit, 100 * (1 - gloss));
     }
-
-    initial_hit.pos += initial_hit.normal * 0.001;
-
-    vec3 hit_normal_mask = vec3(equal(initial_hit.normal, vec3(0.0))) * sum_of_dimensions(initial_hit.normal);
-    vec4 shadow = vec4(0.0);
-
-    int rand_x = rand(rand_seed);
-    int rand_y = rand(rand_seed);
-    int rand_z = rand(rand_seed);
-
-    // randomize the initial vector a little more
-    for (float n = 0.0; n < 4.0; n++) {
-        rand_x = rand(rand_z);
-        rand_y = rand(rand_y);
-        rand_z = rand(rand_x);
-    }
-
-    const float num_samples = 100;
-    const float highlight_samples = 50;
-    const float highlight_sensitivity = 0.99;
-    const uint bounce_dist = 20;
-    float light_amount = 1.0;
-
-    for (float i = 0; i < num_samples; i++) {
-        vec3 to_light = normalize(initial_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * hit_normal_mask * 4.0);
-        hit to_light_hit = hit_in_direction(initial_hit.pos, to_light, bounce_dist);
-
-        if (to_light_hit.unit_code == 0) {
-            shadow += albedo_color;
-            light_amount++;
-        } else {
-            shadow += albedo_color * (float(to_light_hit.dist) / float(bounce_dist));
-        }
-
-        if (light_amount / i > highlight_sensitivity && i > highlight_samples) {
-            fragment_color = albedo_color;
-            return;
-        }
-
-        rand_x = rand(rand_z);
-        rand_y = rand(rand_y);
-        rand_z = rand(rand_x);
-    }
-
-    fragment_color = shadow / num_samples;
-//
-//    uint index =
-//    uint(
-//        floor((vertex_color.y + 1) / 2 * 16) * 16 +
-//        floor((vertex_color.x + 1) / 2 * 16)
-//    );
-//    fragment_color = pc.palette[index];
 }
-
