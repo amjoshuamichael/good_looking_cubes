@@ -8,8 +8,7 @@ pub fn find_color_format<B: gfx_hal::Backend, Closure: FnMut(&Format) -> bool>(
     closure: Closure,
 ) -> Format {
     let supported_formats = surface
-        .supported_formats(&adapter.physical_device)
-        .unwrap_or(vec![]);
+        .supported_formats(&adapter.physical_device).unwrap_or_default();
 
     let default_format = *supported_formats.get(0).unwrap_or(&Format::Rgba8Srgb);
 

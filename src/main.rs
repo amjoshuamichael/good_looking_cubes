@@ -76,6 +76,7 @@ fn input_test(
         camera_data_buffer.data.dir[2] -= move_speed;
     } else if keyboard_input.pressed(KeyCode::Y) {
         camera_data_buffer.data.dir[2] += move_speed;
+        println!("{}", camera_data_buffer.data.dir[2]);
     }
 
     if keyboard_input.pressed(KeyCode::Q) {

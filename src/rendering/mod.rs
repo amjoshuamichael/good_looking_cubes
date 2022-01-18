@@ -49,7 +49,7 @@ impl Plugin for CtklrRenderPlugin {
 unsafe fn create_window(
     mut app: App,
 ) {
-    const APP_NAME: &'static str = "gfx test";
+    const APP_NAME: &str = "gfx test";
 
     let camera_data_buffer = DataBuffer::<CameraData>::new(ShaderStageFlags::FRAGMENT);
 
@@ -181,10 +181,7 @@ unsafe fn create_window(
                                                                     &*camera_data_buffer,
                 );
 
-                match render_result {
-                    Err(_) => configure_swapchain(&mut *resources),
-                    _ => (),
-                }
+                if render_result.is_err() { configure_swapchain(&mut *resources) }
             },
             _ => (),
         }

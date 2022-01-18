@@ -1,10 +1,7 @@
 use bevy::app::Plugin;
 use bevy::prelude::*;
-use gfx_hal::buffer::{Offset, SubRange};
-use gfx_hal::command::{CommandBuffer, CommandBufferFlags, Level};
-use gfx_hal::prelude::{CommandPool, CommandQueue};
-use gfx_hal::queue::Submission;
-use shaderc::GlslProfile::Core;
+use gfx_hal::command::{CommandBuffer, CommandBufferFlags};
+use gfx_hal::prelude::CommandQueue;
 
 use crate::{App, FixedTimestep, PHYSICS_TIME_STEP};
 use crate::rendering::resources::RenderInfo;

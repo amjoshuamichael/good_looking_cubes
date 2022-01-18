@@ -8,23 +8,10 @@ pub struct DataBuffer<T> {
     pub shader_stage: ShaderStageFlags,
 }
 
-impl<T: DataForBuffer + Pod> Default for DataBuffer<T> {
-    fn default() -> Self {
-        Self {
-            data: T::new(),
-            shader_stage: ShaderStageFlags::FRAGMENT,
-        }
-    }
-}
-
-pub trait DataForBuffer {
-    fn new() -> Self;
-}
-
-impl<T: DataForBuffer + Pod> DataBuffer<T> {
+impl<T: Default + Pod> DataBuffer<T> {
     pub fn new(shader_stage: ShaderStageFlags) -> Self {
         Self {
-            data: T::new(),
+            data: T::default(),
             shader_stage,
         }
     }

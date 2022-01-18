@@ -1,5 +1,4 @@
 use std::borrow::Borrow;
-use gfx_hal::buffer::SubRange;
 use gfx_hal::command::{ClearColor, ClearValue, CommandBufferFlags, SubpassContents};
 use gfx_hal::image::Extent;
 use gfx_hal::prelude::*;
@@ -107,7 +106,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
         command_buffer.set_viewports(0, &[low_res_viewport.clone()]);
         command_buffer.set_scissors(0, &[low_res_viewport.rect]);
 
-        command_buffer.bind_graphics_descriptor_sets(&temp_pipeline_layout, 0, Some(&res.description_sets[1]), &[]);
+        command_buffer.bind_graphics_descriptor_sets(temp_pipeline_layout, 0, Some(&res.description_sets[1]), &[]);
 
         command_buffer.begin_render_pass(
             render_pass,
@@ -132,7 +131,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
         command_buffer.draw(0..6, 0..1);
         command_buffer.end_render_pass();
 
-        command_buffer.bind_graphics_descriptor_sets(&surface_pipeline_layout, 0, Some(&res.description_sets[0]), &[]);
+        command_buffer.bind_graphics_descriptor_sets(surface_pipeline_layout, 0, Some(&res.description_sets[0]), &[]);
 
         command_buffer.set_viewports(0, &[full_viewport.clone()]);
         command_buffer.set_scissors(0, &[full_viewport.rect]);
@@ -174,10 +173,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
         res.device.destroy_framebuffer(temp_framebuffer);
         res.device.destroy_framebuffer(surface_framebuffer);
 
-        match result {
-            Err(_) => return Err(()),
-            _ => (),
-        };
+        if result.is_err() { return Err(()) }
     }
 
     Ok(())

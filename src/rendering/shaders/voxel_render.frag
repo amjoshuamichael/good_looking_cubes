@@ -1,17 +1,13 @@
 struct hit {
     vec3 pos;
     vec3 normal;
+    uint dist; // from origin of ray
 
     uint unit_code;
 };
 
 vec4 color_from(uint color) {
-    uint r = color >> 24;
-    uint g = color <<  8 >> 24;
-    uint b = color << 16 >> 24;
-    uint a = color << 24 >> 24;
-
-    return vec4(float(r), float(g), float(b), float(a)) / 256.0;
+    return pc.palette[color >> 24];
 }
 
 hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
@@ -58,18 +54,16 @@ hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
 
         unit_at_check_point = unit_at(check_point);
         if(unit_at_check_point != 0) {
-            return hit(ro + rd * size_of_min_dimension(ray_length), - comp * step, unit_at_check_point);
+            return hit(ro + rd * size_of_min_dimension(ray_length), - comp * step, i, unit_at_check_point);
         }
 
         ray_length += comp * ray_unit_step_size;
     };
 
-    return hit(vec3(0.0), vec3(0.0), 0);
+    return hit(vec3(0.0), vec3(0.0), 0, 0);
 }
 
 void main() {
-    uint num_samples = 100;
-
     float fov = 1.0;
 
     vec3 rd = normalize(
@@ -84,9 +78,9 @@ void main() {
     int rand_seed = setup_rand(rd.xz + rd.yy + ro.xz + ro.yy);
 
     hit initial_hit = hit_in_direction(ro, rd, 400);
-    vec4 albedo_color = flatten_color(color_from(initial_hit.unit_code));
-    if (albedo_color == vec4(0.0)) {
-        fragment_color = vec4(1.0);
+    vec4 albedo_color = color_from(initial_hit.unit_code);
+    if (albedo_color.xyz == vec3(0.0, 0.0, 0.0)) {
+        fragment_color = mix(vec4(1.0), vec4(vertex_color.xy, 1.0, 1.0), 0.5);
         return;
     }
 
@@ -106,13 +100,26 @@ void main() {
         rand_z = rand(rand_x);
     }
 
+    const float num_samples = 100;
+    const float highlight_samples = 50;
+    const float highlight_sensitivity = 0.99;
+    const uint bounce_dist = 20;
+    float light_amount = 1.0;
 
-    for (uint i = 0; i < num_samples; i++) {
+    for (float i = 0; i < num_samples; i++) {
         vec3 to_light = normalize(initial_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * hit_normal_mask * 4.0);
-        hit to_light_hit = hit_in_direction(initial_hit.pos, to_light, 20);
+        hit to_light_hit = hit_in_direction(initial_hit.pos, to_light, bounce_dist);
 
         if (to_light_hit.unit_code == 0) {
             shadow += albedo_color;
+            light_amount++;
+        } else {
+            shadow += albedo_color * (float(to_light_hit.dist) / float(bounce_dist));
+        }
+
+        if (light_amount / i > highlight_sensitivity && i > highlight_samples) {
+            fragment_color = albedo_color;
+            return;
         }
 
         rand_x = rand(rand_z);
@@ -120,7 +127,13 @@ void main() {
         rand_z = rand(rand_x);
     }
 
-    fragment_color = shadow / float(num_samples);
-//    fragment_color = vec4(normalize(vec3(rand_x, rand_y, rand_z)), 1.0);
+    fragment_color = shadow / num_samples;
+//
+//    uint index =
+//    uint(
+//        floor((vertex_color.y + 1) / 2 * 16) * 16 +
+//        floor((vertex_color.x + 1) / 2 * 16)
+//    );
+//    fragment_color = pc.palette[index];
 }
 

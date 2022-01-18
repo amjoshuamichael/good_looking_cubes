@@ -7,15 +7,13 @@ pub unsafe fn create_image_view<B: gfx_hal::Backend>(
     image: &B::Image,
     format: Format,
 ) -> B::ImageView {
-    let view = device
+    device
         .create_image_view(
-            &image,
+            image,
             ViewKind::D2,
             format,
             Swizzle::default(),
             SubresourceRange::default(),
         )
-        .expect("failed to create image view");
-
-    view
+        .expect("failed to create image view")
 }
