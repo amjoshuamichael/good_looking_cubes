@@ -6,3 +6,4 @@ pub mod color_format;
 pub mod screen;
 pub mod create_buffer_bindings;
 pub mod pipeline;
+pub mod image_from_file;

@@ -1,7 +1,12 @@
+layout(location = 0) in vec4 vertex_color;
+layout(location = 0) out vec4 fragment_color;
+
 const float total_samples = 100;
 const float highlight_samples = 75;
 const float highlight_sensitivity = 0.99;
 const uint bounce_dist = 20;
+
+const uint AIR = 0;
 
 struct hit {
     vec3 pos;
@@ -11,7 +16,7 @@ struct hit {
     uint unit_code;
 };
 
-hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
+hit hit_in_direction(vec3 ro, vec3 rd, uint dist, uint mask_color) {
     vec3 check_point = floor(ro);
 
     vec3 ray_unit_step_size = vec3(
@@ -54,7 +59,7 @@ hit hit_in_direction(vec3 ro, vec3 rd, uint dist) {
         check_point += comp * step;
 
         unit_at_check_point = unit_at(check_point);
-        if(unit_at_check_point != 0) {
+        if(unit_at_check_point != mask_color) {
             return hit(ro + rd * size_of_min_dimension(ray_length), - comp * step, i, unit_at_check_point);
         }
 
@@ -84,7 +89,7 @@ vec4 sample_at_hit(hit the_hit, float num_samples) {
 
     for (float i = 0; i < num_samples; i++) {
         vec3 to_light = normalize(the_hit.normal + normalize(vec3(rand_x, rand_y, rand_z)) * hit_normal_mask * 4.0);
-        hit to_light_hit = hit_in_direction(the_hit.pos, to_light, bounce_dist);
+        hit to_light_hit = hit_in_direction(the_hit.pos, to_light, bounce_dist, AIR);
         float hit_dist = length(the_hit.pos - to_light_hit.pos) / float(bounce_dist);
 
         if (to_light_hit.unit_code == 0) {
@@ -120,19 +125,31 @@ void main() {
     );
     vec3 ro = vec3(pc.camera_pos.x, pc.camera_pos.y, pc.camera_pos.z);
 
-    hit initial_hit = hit_in_direction(ro, rd, 400);
+    hit init_hit = hit_in_direction(ro, rd, 400, AIR);
 
-    float gloss = metallic_from(initial_hit.unit_code);
+    float gloss = metallic_from(init_hit.unit_code);
+    float translucent = translucent_from(init_hit.unit_code);
+    vec4 output_color;
 
     if (gloss > 0) {
-        vec4 base_color = sample_at_hit(initial_hit, 100 * (1 - gloss));
+        vec4 base_color = sample_at_hit(init_hit, total_samples * (1 - gloss));
 
-        vec3 reflected_dir = reflect(rd, initial_hit.normal);
-        hit reflected_hit = hit_in_direction(initial_hit.pos, reflected_dir, 400);
-        vec4 reflected_color = sample_at_hit(reflected_hit, 100 * gloss);
+        vec3 reflected_dir = reflect(rd, init_hit.normal);
+        hit reflected_hit = hit_in_direction(init_hit.pos, reflected_dir, 400, AIR);
+        vec4 reflected_color = sample_at_hit(reflected_hit, total_samples * gloss);
 
-        fragment_color = mix(base_color, reflected_color, gloss);
+        output_color = mix(base_color, reflected_color, gloss);
+    } else if (translucent > 0) {
+        vec4 base_color = sample_at_hit(init_hit, total_samples * (1 - translucent));
+
+        hit ray_solid_through = hit_in_direction(init_hit.pos - init_hit.normal * 0.001, rd, 400, init_hit.unit_code);
+        hit ray_pass_through = hit_in_direction(ray_solid_through.pos + init_hit.normal * 0.001, rd, 400, 0);
+        vec4 color_through_translucense = sample_at_hit(ray_pass_through, total_samples * translucent);
+
+        output_color = mix(base_color, color_through_translucense, translucent);
     } else {
-        fragment_color = sample_at_hit(initial_hit, 100 * (1 - gloss));
+        output_color = sample_at_hit(init_hit, 100 * (1 - gloss));
     }
+
+    fragment_color = output_color * pc.exposure;
 }

@@ -1,25 +1,52 @@
+use std::collections::HashMap;
+use std::fs::read_to_string;
+
 use bevy::prelude::*;
-use rand::prelude::*;
-use crate::{CameraData, DataBuffer};
+use gfx_hal::buffer::SubRange;
+use gfx_hal::command::{CommandBuffer, CommandBufferFlags};
+use gfx_hal::prelude::CommandQueue;
 
-use crate::world::{CHUNK_SIZE, CHUNK_VOL, CHUNKS_X, CHUNKS_Y, CHUNKS_Z, ChunkUpdate, parse_pec};
+use crate::debug::Command;
+use crate::GPUData;
+use crate::rendering::resources::RenderInfo;
+use crate::world::{CHUNK_SIZE, CHUNK_VOL, ChunkUpdate, parse_pec};
+use crate::world::parse_pec::parse_pec;
 
-fn as_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
-    ((a as u32) << 24) +
-    ((b as u32) << 16) +
-    ((c as u32) <<  8) +
-    (d as u32)
+pub fn load_vox_command<B: gfx_hal::Backend>(
+    mut world_changes: EventWriter<ChunkUpdate>,
+    mut commands: EventReader<Command>,
+    mut command_buffer: ResMut<B::CommandBuffer>,
+    mut res: ResMut<RenderInfo<B>>,
+) {
+    for cmd in commands.iter() {
+        if cmd.is("load-vox") {
+            let world_buffer = &res.buffers[0];
+
+            unsafe {
+                command_buffer.begin_primary(CommandBufferFlags::ONE_TIME_SUBMIT);
+                command_buffer.fill_buffer(world_buffer, SubRange::WHOLE, 0);
+                command_buffer.finish();
+                res.queue_group.queues[0].submit_without_semaphores(vec![&*command_buffer], None);
+            }
+
+            load_vox(world_changes, cmd.get_arg(0));
+            return;
+        }
+    }
 }
 
-
-pub fn load_vox(
-    mut world_changes: ResMut<Vec<ChunkUpdate>>,
-    mut camera_data_buffer: ResMut<DataBuffer<CameraData>>,
+fn load_vox(
+    mut world_changes: EventWriter<ChunkUpdate>,
+    name: &String
 ) {
     let mut chunks_to_load: Vec<UVec3> = Vec::new();
 
-    let vox_data = vox_format::from_file("assets/models/monu16.vox").unwrap();
-    let vox_pec = parse_pec::parse_pec(include_str!("../../assets/models/monu16.pec"));
+    let vox_data = vox_format::from_file(format!("assets/models/{}.vox", name)).unwrap();
+
+    let mut vox_pec = HashMap::new();
+    if let Ok(file) = read_to_string(format!("assets/models/{}.pec", name)) {
+        vox_pec = parse_pec(&file);
+    }
 
     for v in &vox_data.models[0].voxels {
         let chunk_pos = UVec3::new(v.point.x as u32 / 16, v.point.z as u32 / 16,  v.point.y as u32 / 16);
@@ -41,57 +68,16 @@ pub fn load_vox(
 
             new_data[
                 v.point.x as usize % CHUNK_SIZE +
-                v.point.z as usize % CHUNK_SIZE * CHUNK_SIZE +
-                v.point.y as usize % CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
+                    v.point.z as usize % CHUNK_SIZE * CHUNK_SIZE +
+                    v.point.y as usize % CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
                 ] = color + color_info + 1;
         }
 
-        world_changes.push(
+        world_changes.send(
             ChunkUpdate {
                 pos: *c,
                 data: new_data,
             }
         );
     }
-}
-
-pub fn change_world(
-    mut world_changes: ResMut<Vec<ChunkUpdate>>,
-) {
-    for _ in 0..4 {
-        place_random_sphere(&mut world_changes);
-    }
-}
-
-fn place_random_sphere(world_changes: &mut ResMut<Vec<ChunkUpdate>>) {
-    let mut rng = thread_rng();
-    let mut new_data = [0; CHUNK_VOL];
-
-    let color: u32 = rng.gen();
-    let size = rng.gen_range(0..64);
-
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                let o_x = x as i32 - CHUNK_SIZE as i32 / 2;
-                let o_y = y as i32 - CHUNK_SIZE as i32 / 2;
-                let o_z = z as i32 - CHUNK_SIZE as i32 / 2;
-
-                if o_x * o_x + o_y * o_y + o_z * o_z < size {
-                    new_data[x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE] = color;
-                }
-            }
-        }
-    }
-
-    world_changes.push(
-        ChunkUpdate {
-            pos: UVec3::new(
-                rng.gen_range(1..CHUNKS_X) as u32,
-                rng.gen_range(1..CHUNKS_Y) as u32,
-                rng.gen_range(1..CHUNKS_Z) as u32
-            ),
-            data: new_data,
-        }
-    )
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub fn parse_pec(pec_file: &str) -> HashMap<u8, u32> {
+pub fn parse_pec(pec_file: &String) -> HashMap<u8, u32> {
     let mut output_map = HashMap::new();
 
     for statement in pec_file.split("\n") {
@@ -18,6 +18,7 @@ pub fn parse_pec(pec_file: &str) -> HashMap<u8, u32> {
         match color_info_type {
             'e' => color_info = color_info_strength << 20,
             'g' => color_info = color_info_strength << 18,
+            't' => color_info = color_info_strength << 16,
             _ => {}
         }
 

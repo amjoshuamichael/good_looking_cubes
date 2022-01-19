@@ -4,6 +4,7 @@ use gfx_hal::command::{CommandBuffer, CommandBufferFlags};
 use gfx_hal::prelude::CommandQueue;
 
 use crate::{App, FixedTimestep, PHYSICS_TIME_STEP};
+use crate::debug::Command;
 use crate::rendering::resources::RenderInfo;
 
 pub mod change_world;
@@ -29,13 +30,26 @@ pub struct CtklrWorldPlugin;
 impl Plugin for CtklrWorldPlugin {
     fn build(&self, app: &mut App) {
         app
-            .init_resource::<Vec<ChunkUpdate>>()
+            .add_event::<ChunkUpdate>()
             .add_system_set_to_stage(CoreStage::PostUpdate,
                 SystemSet::new()
                     .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                     .with_system(update_world::<backend::Backend>)
-            );
+            )
+            .add_system(change_world::load_vox_command::<backend::Backend>)
+            .add_startup_system(load_initial);
     }
+}
+
+fn load_initial(
+    mut commands: EventWriter<Command>,
+) {
+    commands.send(
+        Command {
+            function: "load-vox".to_string(),
+            arguments: vec!["monu10".to_string()],
+        }
+    )
 }
 
 /// Pushes all of the changes from the Vec<ChunkUpdate> in bevy resources into the GPU buffer, and
@@ -43,7 +57,7 @@ impl Plugin for CtklrWorldPlugin {
 fn update_world<B: gfx_hal::Backend>(
     mut command_buffer: ResMut<B::CommandBuffer>,
     mut res: ResMut<RenderInfo<B>>,
-    mut chunk_updates: ResMut<Vec<ChunkUpdate>>,
+    mut chunk_updates: EventReader<ChunkUpdate>,
 ) {
     let world_buffer = &res.buffers[0];
 
@@ -62,6 +76,4 @@ fn update_world<B: gfx_hal::Backend>(
 
         res.queue_group.queues[0].submit_without_semaphores(vec![&*command_buffer], None);
     }
-
-    chunk_updates.clear();
 }

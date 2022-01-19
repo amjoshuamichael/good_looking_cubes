@@ -3144,6 +3144,7 @@ dependencies = [
  "gfx-backend-metal",
  "gfx-backend-vulkan",
  "gfx-hal",
+ "lazy_static",
  "png 0.17.2",
  "pollster",
  "rand",

@@ -12,6 +12,7 @@ pub const VOXEL_RENDER: &str =
     concat!(
         include_str!("version_header.glsl"),
         include_str!("pc_buffer.glsl"),
+        include_str!("world_buffer.glsl"),
         include_str!("vector_utils.glsl"),
         include_str!("random.glsl"),
         include_str!("index_world.glsl"),
@@ -22,5 +23,7 @@ pub const VOXEL_RENDER: &str =
 pub const POST_PROCESSING: &str =
     concat!(
         include_str!("version_header.glsl"),
+        include_str!("pc_buffer.glsl"),
+        include_str!("vector_utils.glsl"),
         include_str!("post_processing.glsl"),
     );

@@ -6,14 +6,13 @@ use gfx_hal::format::ChannelType;
 use gfx_hal::image::Kind;
 use gfx_hal::pool::CommandPoolCreateFlags;
 use gfx_hal::prelude::*;
-use gfx_hal::pso::ShaderStageFlags;
 use gfx_hal::window::Extent2D;
 use gfx_hal::window::SwapchainConfig;
 use time::Instant;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-use camera_data_buffer::CameraData;
+use gpu_data::GPUData;
 use constructs::color_format::*;
 use constructs::create_buffer_bindings::*;
 use constructs::create_image_bindings::*;
@@ -22,27 +21,29 @@ use constructs::memory::*;
 use constructs::pipeline::*;
 use constructs::render_pass::*;
 use constructs::screen::*;
-use data_buffer::DataBuffer;
 use render::render_draw;
 use render::RenderEvent;
 use resources::RenderInfo;
+use crate::rendering::constructs::image_from_file::create_image_buffer_from_file;
 use crate::world::VOXEL_COUNT;
 
 pub mod bevy_to_winit;
-pub mod camera_data_buffer;
+pub mod gpu_data;
 pub mod render;
-pub mod data_buffer;
 
 pub mod shaders;
 pub mod constructs;
 pub mod resources;
+pub mod picture_info;
 
 #[derive(Default)]
 pub struct CtklrRenderPlugin;
 
 impl Plugin for CtklrRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.set_runner(|app| unsafe { create_window(app) });
+
+        app.set_runner(|app| unsafe { create_window(app) })
+            .add_system(picture_info::setup_picture_data);
     }
 }
 
@@ -51,7 +52,7 @@ unsafe fn create_window(
 ) {
     const APP_NAME: &str = "gfx test";
 
-    let camera_data_buffer = DataBuffer::<CameraData>::new(ShaderStageFlags::FRAGMENT);
+    let gpu_data_buffer = GPUData::default();
 
     let event_loop = winit::event_loop::EventLoop::new();
 
@@ -72,10 +73,15 @@ unsafe fn create_window(
     let instance = backend::Instance::create("ctklr", 1).expect("Backend not supported");
     let surface = instance.create_surface(&window).expect("Failed to create window surface");
     let adapter = instance.enumerate_adapters().remove(0);
-    let (device, queue_group) = device_info(&surface, &adapter);
+    let (device, mut queue_group) = device_info(&surface, &adapter);
 
     let surface_color_format =
         find_color_format(&surface, &adapter, |format| format.base_format().1 == ChannelType::Srgb);
+
+    let mut command_pool = device
+        .create_command_pool(queue_group.family, CommandPoolCreateFlags::empty())
+        .expect("Out of memory");
+    let mut command_buffer = command_pool.allocate_one(Level::Primary);
 
     // The word "temp" is used to described the texture that the shaders render on to. This texture
     // is then upscaled and rendered to the main screen through the surface pipeline.
@@ -87,10 +93,9 @@ unsafe fn create_window(
     let world_buffer = create_buffer::<backend::Backend>(&device, (VOXEL_COUNT * 4) as u64);
     let (world_set_layout, world_description_set) = create_buffer_bindings::<backend::Backend>(&device, &world_buffer);
 
-    let mut command_pool = device
-        .create_command_pool(queue_group.family, CommandPoolCreateFlags::empty())
-        .expect("Out of memory");
-    let mut command_buffer = command_pool.allocate_one(Level::Primary);
+    let font_data = create_image_buffer_from_file::<backend::Backend>
+        (&device, &mut command_buffer, &mut queue_group, "assets/images/font.png");
+    let (font_set_layout, font_description_set) = create_buffer_bindings::<backend::Backend>(&device, &font_data);
 
     let render_pass = create_render_pass::<backend::Backend>(&device, surface_color_format);
 
@@ -99,10 +104,10 @@ unsafe fn create_window(
     let post_processing_shader = shaders::POST_PROCESSING;
 
     let temp_pipeline_layout = device
-        .create_pipeline_layout(&[world_set_layout], &[camera_data_buffer.layout()])
+        .create_pipeline_layout(&[world_set_layout], &[gpu_data_buffer.layout()])
         .expect("Out of memory");
     let surface_pipeline_layout = device
-        .create_pipeline_layout(&[temp_set_layout], &[])
+        .create_pipeline_layout(&[temp_set_layout, font_set_layout], &[gpu_data_buffer.layout()])
         .expect("Out of memory");
 
     let temp_pipeline = make_pipeline::<backend::Backend>
@@ -125,7 +130,7 @@ unsafe fn create_window(
         render_pipelines: vec![temp_pipeline, surface_pipeline],
         compute_pipelines: vec![],
         image_views: vec![temp_image_view],
-        description_sets: vec![temp_description_set, world_description_set],
+        description_sets: vec![temp_description_set, world_description_set, font_description_set],
         samplers: vec![temp_sampler],
         buffers: vec![world_buffer],
         buffer_views: vec![],
@@ -141,7 +146,7 @@ unsafe fn create_window(
 
     configure_swapchain(&mut resources);
 
-    app.insert_resource(camera_data_buffer);
+    app.insert_resource(gpu_data_buffer);
     app.insert_resource(resources);
     app.insert_resource(global_command_buffer);
 
@@ -169,7 +174,7 @@ unsafe fn create_window(
             },
             Event::RedrawRequested(_) => {
                 let world = app.world.cell();
-                let camera_data_buffer = world.get_resource::<DataBuffer<CameraData>>().unwrap();
+                let gpu_data_buffer = world.get_resource::<GPUData>().unwrap();
 
                 let mut render_event_writer = world.get_resource_mut::<Events<RenderEvent>>().unwrap();
                 render_event_writer.send(RenderEvent{time: Instant::now()});
@@ -178,7 +183,7 @@ unsafe fn create_window(
 
                 let render_result = render_draw::<backend::Backend>(&mut *resources,
                                                                     &mut command_buffer,
-                                                                    &*camera_data_buffer,
+                                                                    &gpu_data_buffer,
                 );
 
                 if render_result.is_err() { configure_swapchain(&mut *resources) }

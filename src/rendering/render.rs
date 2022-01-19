@@ -2,14 +2,12 @@ use std::borrow::Borrow;
 use gfx_hal::command::{ClearColor, ClearValue, CommandBufferFlags, SubpassContents};
 use gfx_hal::image::Extent;
 use gfx_hal::prelude::*;
-use gfx_hal::pso::{Rect, Viewport};
+use gfx_hal::pso::{Rect, ShaderStageFlags, Viewport};
 use gfx_hal::queue::Submission;
 use time::Instant;
 
-use crate::CameraData;
+use crate::GPUData;
 use crate::rendering::resources::RenderInfo;
-
-use super::data_buffer::DataBuffer;
 
 pub struct RenderEvent {
     pub time: Instant,
@@ -18,7 +16,7 @@ pub struct RenderEvent {
 pub fn render_draw<B: gfx_hal::Backend>(
     res: &mut RenderInfo<B>,
     command_buffer: &mut B::CommandBuffer,
-    camera_data_buffer: &DataBuffer<CameraData>,
+    camera_data_buffer: &GPUData,
 ) -> Result<(), ()> {
     let render_pass = &res.render_passes[0];
     let temp_pipeline_layout = &res.pipeline_layouts[0];
@@ -123,7 +121,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
 
         command_buffer.push_graphics_constants(
             temp_pipeline_layout,
-            camera_data_buffer.shader_stage,
+            ShaderStageFlags::ALL,
             0,
             camera_data_buffer.bytes(),
         );
@@ -132,6 +130,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
         command_buffer.end_render_pass();
 
         command_buffer.bind_graphics_descriptor_sets(surface_pipeline_layout, 0, Some(&res.description_sets[0]), &[]);
+        command_buffer.bind_graphics_descriptor_sets(surface_pipeline_layout, 1, Some(&res.description_sets[2]), &[]);
 
         command_buffer.set_viewports(0, &[full_viewport.clone()]);
         command_buffer.set_scissors(0, &[full_viewport.rect]);
