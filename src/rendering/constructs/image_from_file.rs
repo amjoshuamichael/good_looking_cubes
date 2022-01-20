@@ -1,19 +1,15 @@
 use gfx_hal::prelude::*;
 use std::fs::File;
-use gfx_hal::buffer::SubRange;
 use gfx_hal::command::CommandBufferFlags;
-use gfx_hal::format::Format;
-use gfx_hal::image::Kind;
 use gfx_hal::queue::QueueGroup;
-use crate::rendering::constructs::create_buffer_bindings::create_buffer_bindings;
-use crate::rendering::constructs::memory::{create_buffer, create_image};
+use crate::rendering::constructs::memory::{create_buffer};
 
 /// Converts an image from a file into a buffer (not an image, a buffer containing image data)
 /// that can be read from the gpu.
 pub unsafe fn create_image_buffer_from_file<B: gfx_hal::Backend>(
     device: &B::Device,
-    mut command_buffer: &mut B::CommandBuffer,
-    mut queue_group: &mut QueueGroup<B>,
+    command_buffer: &mut B::CommandBuffer,
+    queue_group: &mut QueueGroup<B>,
     file: &str,
 ) -> B::Buffer {
     let decoder = png::Decoder::new(File::open(file).unwrap());

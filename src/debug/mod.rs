@@ -1,9 +1,7 @@
 use bevy::core::FixedTimestep;
 use bevy::prelude::*;
 use bevy::prelude::KeyCode::*;
-use std::any::type_name;
 use std::collections::HashMap;
-use std::str::FromStr;
 use lazy_static::lazy_static;
 use crate::GPUData;
 use crate::input::InputState;
@@ -158,8 +156,8 @@ pub fn command_input(
     }
 }
 
-fn clear_text(mut text: &mut [u32; 256]) {
-    for mut c in text.iter_mut() { *c = 0 };
+fn clear_text(text: &mut [u32; 256]) {
+    for c in text.iter_mut() { *c = 0 };
 }
 
 fn parse_command(text: &[u32; 256]) -> Command {
@@ -171,7 +169,7 @@ fn parse_command(text: &[u32; 256]) -> Command {
         }
     }
 
-    let mut cmd_split = cmd_string.split(" ");
+    let mut cmd_split = cmd_string.split(' ');
     let function = cmd_split.next().expect("empty command").to_string();
     let arguments = cmd_split.map(|str| str.to_string()).collect();
 
@@ -189,7 +187,7 @@ pub struct Command {
 
 impl Command {
     pub fn is(&self, check: &str) -> bool {
-        check.to_string() == self.function
+        *check.to_string() == self.function
     }
 
     //TODO: use generics here

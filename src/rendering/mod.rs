@@ -90,6 +90,12 @@ unsafe fn create_window(
     let (temp_set_layout, temp_description_set, temp_sampler) =
         create_image_bindings::<backend::Backend>(&device, &temp_image_view);
 
+    // depth / normal pass used to feed data to the box blur denoiser.
+    let depth_image = create_image::<backend::Backend>(&device, Kind::D2(width, height, 1, 1), surface_color_format);
+    let depth_image_view = create_image_view::<backend::Backend>(&device, &depth_image, surface_color_format);
+    let (depth_set_layout, depth_description_set, depth_sampler) =
+        create_image_bindings::<backend::Backend>(&device, &depth_image_view);
+
     let world_buffer = create_buffer::<backend::Backend>(&device, (VOXEL_COUNT * 4) as u64);
     let (world_set_layout, world_description_set) = create_buffer_bindings::<backend::Backend>(&device, &world_buffer);
 
@@ -104,10 +110,10 @@ unsafe fn create_window(
     let post_processing_shader = shaders::POST_PROCESSING;
 
     let temp_pipeline_layout = device
-        .create_pipeline_layout(&[world_set_layout], &[gpu_data_buffer.layout()])
+        .create_pipeline_layout([&depth_set_layout, &world_set_layout], &[gpu_data_buffer.layout()])
         .expect("Out of memory");
     let surface_pipeline_layout = device
-        .create_pipeline_layout(&[temp_set_layout, font_set_layout], &[gpu_data_buffer.layout()])
+        .create_pipeline_layout([&temp_set_layout, &font_set_layout, &depth_set_layout], &[gpu_data_buffer.layout()])
         .expect("Out of memory");
 
     let temp_pipeline = make_pipeline::<backend::Backend>
@@ -129,9 +135,9 @@ unsafe fn create_window(
         pipeline_layouts: vec![temp_pipeline_layout, surface_pipeline_layout],
         render_pipelines: vec![temp_pipeline, surface_pipeline],
         compute_pipelines: vec![],
-        image_views: vec![temp_image_view],
-        description_sets: vec![temp_description_set, world_description_set, font_description_set],
-        samplers: vec![temp_sampler],
+        image_views: vec![temp_image_view, depth_image_view],
+        description_sets: vec![temp_description_set, world_description_set, font_description_set, depth_description_set],
+        samplers: vec![temp_sampler, depth_sampler],
         buffers: vec![world_buffer],
         buffer_views: vec![],
         command_pool,

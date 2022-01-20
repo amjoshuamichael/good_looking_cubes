@@ -47,7 +47,7 @@ fn load_initial(
     commands.send(
         Command {
             function: "load-vox".to_string(),
-            arguments: vec!["monu10".to_string()],
+            arguments: vec!["pinball".to_string()],
         }
     )
 }

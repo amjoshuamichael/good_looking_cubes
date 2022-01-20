@@ -26,14 +26,14 @@ impl Default for GPUData {
         let palette = {
             let mut palette = [[0.0; 4]; 256];
 
-            let decoder = png::Decoder::new(File::open("assets/palettes/basic.png").unwrap());
+            let decoder = png::Decoder::new(File::open("assets/palettes/pinball.png").unwrap());
             let mut reader = decoder.read_info().unwrap();
             let mut buf = vec![0; reader.output_buffer_size()];
             let info = reader.next_frame(&mut buf).unwrap();
             let bytes = &buf[..info.buffer_size()];
 
-            for c in 0..256 {
-                let byte_index = c * 4;
+            for c in 1..256 {
+                let byte_index = (c - 1) * 4;
 
                 palette[c] = [
                     bytes[byte_index    ] as f32 / 256.0,

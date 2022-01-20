@@ -1,13 +1,3 @@
-layout(location = 0) in vec4 vertex_color;
-layout(location = 0) out vec4 fragment_color;
-
-const float total_samples = 100;
-const float highlight_samples = 75;
-const float highlight_sensitivity = 0.99;
-const uint bounce_dist = 20;
-
-const uint AIR = 0;
-
 struct hit {
     vec3 pos;
     vec3 normal;
@@ -148,8 +138,13 @@ void main() {
 
         output_color = mix(base_color, color_through_translucense, translucent);
     } else {
-        output_color = sample_at_hit(init_hit, 100 * (1 - gloss));
+        output_color = sample_at_hit(init_hit, total_samples * (1 - gloss));
     }
 
     fragment_color = output_color * pc.exposure;
+
+    // store into depth texture
+    vec2 vertex_norm = vertex_color.xy / 2 + 0.5;
+    vec3 pos_floored = floor(init_hit.pos) / 64.73;
+    imageStore(depth_image, ivec2(vertex_norm.x * 400, vertex_norm.y * 400), vec4(init_hit.normal, 1.0));
 }

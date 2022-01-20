@@ -7,13 +7,12 @@ use gfx_hal::command::{CommandBuffer, CommandBufferFlags};
 use gfx_hal::prelude::CommandQueue;
 
 use crate::debug::Command;
-use crate::GPUData;
 use crate::rendering::resources::RenderInfo;
-use crate::world::{CHUNK_SIZE, CHUNK_VOL, ChunkUpdate, parse_pec};
+use crate::world::{CHUNK_SIZE, CHUNK_VOL, ChunkUpdate};
 use crate::world::parse_pec::parse_pec;
 
 pub fn load_vox_command<B: gfx_hal::Backend>(
-    mut world_changes: EventWriter<ChunkUpdate>,
+    world_changes: EventWriter<ChunkUpdate>,
     mut commands: EventReader<Command>,
     mut command_buffer: ResMut<B::CommandBuffer>,
     mut res: ResMut<RenderInfo<B>>,

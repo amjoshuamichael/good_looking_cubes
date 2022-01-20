@@ -104,7 +104,8 @@ pub fn render_draw<B: gfx_hal::Backend>(
         command_buffer.set_viewports(0, &[low_res_viewport.clone()]);
         command_buffer.set_scissors(0, &[low_res_viewport.rect]);
 
-        command_buffer.bind_graphics_descriptor_sets(temp_pipeline_layout, 0, Some(&res.description_sets[1]), &[]);
+        command_buffer.bind_graphics_descriptor_sets(temp_pipeline_layout, 1, Some(&res.description_sets[1]), &[]);
+        command_buffer.bind_graphics_descriptor_sets(temp_pipeline_layout, 0, Some(&res.description_sets[3]), &[]);
 
         command_buffer.begin_render_pass(
             render_pass,
@@ -131,6 +132,7 @@ pub fn render_draw<B: gfx_hal::Backend>(
 
         command_buffer.bind_graphics_descriptor_sets(surface_pipeline_layout, 0, Some(&res.description_sets[0]), &[]);
         command_buffer.bind_graphics_descriptor_sets(surface_pipeline_layout, 1, Some(&res.description_sets[2]), &[]);
+        command_buffer.bind_graphics_descriptor_sets(surface_pipeline_layout, 2, Some(&res.description_sets[3]), &[]);
 
         command_buffer.set_viewports(0, &[full_viewport.clone()]);
         command_buffer.set_scissors(0, &[full_viewport.rect]);
