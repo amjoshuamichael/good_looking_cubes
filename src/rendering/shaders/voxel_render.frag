@@ -19,37 +19,24 @@ struct hit {
 hit hit_in_direction(vec3 ro, vec3 rd, uint dist, uint mask_color) {
     vec3 check_point = floor(ro);
 
+    float xy = rd.x / rd.y;
+    float yz = rd.y / rd.z;
+    float zx = rd.z / rd.x;
+    float xz = rd.x / rd.z;
+    float yx = rd.y / rd.x;
+    float zy = rd.z / rd.y;
+
     vec3 ray_unit_step_size = vec3(
-        sqrt(1 + (rd.z / rd.x) * (rd.z / rd.x) + (rd.y / rd.x) * (rd.y / rd.x)),
+        sqrt(1 + zx * zx + yx * yx),
         sqrt(1 + (rd.x / rd.y) * (rd.x / rd.y) + (rd.z / rd.y) * (rd.z / rd.y)),
         sqrt(1 + (rd.x / rd.z) * (rd.x / rd.z) + (rd.y / rd.z) * (rd.y / rd.z))
     );
-    vec3 step = vec3(sign(rd));
-    vec3 ray_length;
-
-    if (rd.x < 0) {
-        ray_length.x = (ro.x - check_point.x) * ray_unit_step_size.x;
-    } else {
-        ray_length.x = (check_point.x + 1 - ro.x) * ray_unit_step_size.x;
-    }
-
-    if (rd.y < 0) {
-        ray_length.y = (ro.y - check_point.y) * ray_unit_step_size.y;
-    } else {
-        ray_length.y = (check_point.y + 1 - ro.y) * ray_unit_step_size.y;
-    }
-
-    if (rd.z < 0) {
-        ray_length.z = (ro.z - check_point.z) * ray_unit_step_size.z;
-    } else {
-        ray_length.z = (check_point.z + 1 - ro.z) * ray_unit_step_size.z;
-    }
+    vec3 step = sign(rd);
+    vec3 ray_length = (step * (check_point - ro) + (step / 2 + 0.5)) * ray_unit_step_size;
 
     vec3 comp;
-
     uint unit_at_check_point;
-
-    for (int i = 0; i < dist; i++){
+    for (int i = 0; i < dist; i++) {
         comp = vec3(bvec3(
             ray_length.x < ray_length.y && ray_length.x <= ray_length.z,
             ray_length.y < ray_length.z && ray_length.y <= ray_length.x,
@@ -148,7 +135,7 @@ void main() {
 
         output_color = mix(base_color, color_through_translucense, translucent);
     } else {
-        output_color = sample_at_hit(init_hit, 100 * (1 - gloss));
+        output_color = sample_at_hit(init_hit, total_samples);
     }
 
     fragment_color = output_color * pc.exposure;

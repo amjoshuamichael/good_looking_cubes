@@ -1,9 +1,9 @@
+#![allow(dead_code)]
+
 use bevy::core::FixedTimestep;
 use bevy::prelude::*;
 use bevy::prelude::KeyCode::*;
-use std::any::type_name;
 use std::collections::HashMap;
-use std::str::FromStr;
 use lazy_static::lazy_static;
 use crate::GPUData;
 use crate::input::InputState;
@@ -158,8 +158,8 @@ pub fn command_input(
     }
 }
 
-fn clear_text(mut text: &mut [u32; 256]) {
-    for mut c in text.iter_mut() { *c = 0 };
+fn clear_text(text: &mut [u32; 256]) {
+    for c in text.iter_mut() { *c = 0 };
 }
 
 fn parse_command(text: &[u32; 256]) -> Command {
