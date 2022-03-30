@@ -79,6 +79,8 @@ fn compile_shader(glsl: &str, shader_kind: ShaderKind) -> Vec<u32> {
 
     let compiler_options = shaderc::CompileOptions::new().unwrap();
 
+    println!("compiled!");
+
     let compiled_shader = compiler
         .compile_into_spirv(glsl, shader_kind, "unnamed", "main", Some(&compiler_options))
         .expect("Failed to compile shader");

@@ -6,9 +6,10 @@ use bevy::prelude::KeyCode::*;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 use crate::GPUData;
-use crate::input::InputState;
+use crate::input::KeyboardInputState;
 
 mod log_framerate;
+mod world_edit;
 
 const DEBUG_TIME_STEP: f64 = 1.0 / 5.0;
 
@@ -23,6 +24,7 @@ impl Plugin for CtklrDebugPlugin {
                     .with_system(log_framerate::log_framerate)
             )
             .add_system(command_input)
+            .add_system(world_edit::edit_world)
             .add_event::<Command>();
     }
 }
@@ -122,23 +124,23 @@ lazy_static! {
 
 pub fn command_input(
     keyboard_input: Res<Input<KeyCode>>,
-    mut input_state: ResMut<InputState>,
+    mut input_state: ResMut<KeyboardInputState>,
     mut gpu_data: ResMut<GPUData>,
     mut command_events: EventWriter<Command>,
 ) {
     if keyboard_input.pressed(LShift) && keyboard_input.just_pressed(C) {
-        *input_state = InputState::Commands;
+        *input_state = KeyboardInputState::Commands;
         return;
     }
 
-    if *input_state != InputState::Commands { return; }
+    if *input_state != KeyboardInputState::Commands { return; }
 
     if keyboard_input.pressed(Escape) {
-        *input_state = InputState::default();
+        *input_state = KeyboardInputState::default();
         clear_text(&mut gpu_data.text_to_show);
         return;
     } else if keyboard_input.pressed(Return) {
-        *input_state = InputState::default();
+        *input_state = KeyboardInputState::default();
         command_events.send(parse_command(&gpu_data.text_to_show));
         clear_text(&mut gpu_data.text_to_show);
         return;

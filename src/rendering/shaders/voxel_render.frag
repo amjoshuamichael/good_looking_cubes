@@ -1,5 +1,5 @@
-layout(location = 0) in vec4 vertex_color;
-layout(location = 0) out vec4 fragment_color;
+//layout(location = 0) in vec4 vertex_color;
+//layout(location = 0) out vec4 fragment_color;
 
 const float total_samples = 100;
 const float highlight_samples = 75;
@@ -7,54 +7,6 @@ const float highlight_sensitivity = 0.99;
 const uint bounce_dist = 20;
 
 const uint AIR = 0;
-
-struct hit {
-    vec3 pos;
-    vec3 normal;
-    uint dist; // from origin of ray
-
-    uint unit_code;
-};
-
-hit hit_in_direction(vec3 ro, vec3 rd, uint dist, uint mask_color) {
-    vec3 check_point = floor(ro);
-
-    float xy = rd.x / rd.y;
-    float yz = rd.y / rd.z;
-    float zx = rd.z / rd.x;
-    float xz = rd.x / rd.z;
-    float yx = rd.y / rd.x;
-    float zy = rd.z / rd.y;
-
-    vec3 ray_unit_step_size = vec3(
-        sqrt(1 + zx * zx + yx * yx),
-        sqrt(1 + (rd.x / rd.y) * (rd.x / rd.y) + (rd.z / rd.y) * (rd.z / rd.y)),
-        sqrt(1 + (rd.x / rd.z) * (rd.x / rd.z) + (rd.y / rd.z) * (rd.y / rd.z))
-    );
-    vec3 step = sign(rd);
-    vec3 ray_length = (step * (check_point - ro) + (step / 2 + 0.5)) * ray_unit_step_size;
-
-    vec3 comp;
-    uint unit_at_check_point;
-    for (int i = 0; i < dist; i++) {
-        comp = vec3(bvec3(
-            ray_length.x < ray_length.y && ray_length.x <= ray_length.z,
-            ray_length.y < ray_length.z && ray_length.y <= ray_length.x,
-            ray_length.z < ray_length.x && ray_length.z <= ray_length.y
-        ));
-
-        check_point += comp * step;
-
-        unit_at_check_point = unit_at(check_point);
-        if(unit_at_check_point != mask_color) {
-            return hit(ro + rd * size_of_min_dimension(ray_length), - comp * step, i, unit_at_check_point);
-        }
-
-        ray_length += comp * ray_unit_step_size;
-    };
-
-    return hit(vec3(0.0), vec3(0.0), 0, 0);
-}
 
 vec4 sample_at_hit(hit the_hit, float num_samples) {
     if (is_air(the_hit.unit_code)) {
@@ -138,5 +90,5 @@ void main() {
         output_color = sample_at_hit(init_hit, total_samples);
     }
 
-    fragment_color = output_color * pc.exposure;
+    fragment_color += output_color * pc.exposure;
 }

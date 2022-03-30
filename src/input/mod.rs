@@ -8,31 +8,49 @@ pub struct CtklrInputPlugin;
 impl Plugin for CtklrInputPlugin {
     fn build(&self, app: &mut App) {
         app.add_system(camera_movement)
-            .insert_resource(InputState::FreeCam);
+            .insert_resource(KeyboardInputState::default())
+            .insert_resource(CursorInputState::TilemapEdit)
+            .insert_resource(GamepadInputState::Play)
+            .insert_resource(MousePos(Vec2::new(0.0, 0.0)));
     }
 }
 
 #[derive(PartialEq)]
-pub enum InputState {
+pub enum KeyboardInputState {
     Commands,
     FreeCam,
 }
 
-impl Default for InputState {
-    fn default() -> Self { InputState::FreeCam }
+impl Default for KeyboardInputState {
+    fn default() -> Self {
+        KeyboardInputState::FreeCam
+    }
 }
+
+#[derive(PartialEq)]
+pub enum CursorInputState {
+    TilemapEdit,
+    Play,
+}
+
+#[derive(PartialEq)]
+pub enum GamepadInputState {
+    Play,
+}
+
+pub struct MousePos(pub Vec2);
 
 fn camera_movement(
     keyboard_input: Res<Input<KeyCode>>,
-    input_state: Res<InputState>,
+    input_state: Res<KeyboardInputState>,
     mut gpu_data: ResMut<GPUData>,
 ) {
-    if *input_state != InputState::FreeCam { return; }
+    if *input_state != KeyboardInputState::FreeCam { return; }
 
     let mut move_speed = 0.02;
 
     if keyboard_input.pressed(Return) {
-        move_speed = 0.1;
+        move_speed = 1.0;
     }
 
     if keyboard_input.pressed(A) {
