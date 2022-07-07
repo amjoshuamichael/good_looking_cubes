@@ -1,16 +1,16 @@
 use bevy::app::Plugin;
 use bevy::prelude::*;
 use bevy::utils::HashMap;
+use gfx_hal::buffer::SubRange;
 use gfx_hal::command::{CommandBuffer, CommandBufferFlags};
 use gfx_hal::prelude::CommandQueue;
 use gfx_hal::Backend;
-use gfx_hal::buffer::SubRange;
 
 use model_loader::ModelAssetPlugin;
 
 use crate::rendering::resources::RenderInfo;
-use crate::{App, FixedTimestep, PHYSICS_TIME_STEP};
 use crate::world::draw_type::ModelType;
+use crate::{App, FixedTimestep, PHYSICS_TIME_STEP};
 
 pub mod draw;
 pub mod draw_type;
@@ -55,6 +55,7 @@ pub type WorldUpdates = HashMap<UVec3, Vec<(ModelType, [u32; CHUNK_VOL])>>;
 pub struct CtklrWorldPlugin;
 
 /// used as a bevy event. when sent, the world is cleared.
+#[derive(Default)]
 pub struct ClearWorld;
 
 impl Plugin for CtklrWorldPlugin {
@@ -90,22 +91,19 @@ pub fn update_world<B: gfx_hal::Backend>(
             let chunk_pos_index =
                 pos.x + pos.y * CHUNKS_X as u32 + pos.z * CHUNKS_X as u32 * CHUNKS_Y as u32;
 
-            let voxel_data_offset = chunk_pos_index * (CHUNK_VOL * std::mem::size_of::<u32>()) as u32;
+            let voxel_data_offset =
+                chunk_pos_index * (CHUNK_VOL * std::mem::size_of::<u32>()) as u32;
 
             command_buffer.update_buffer(
                 world_buffer,
                 voxel_data_offset.into(),
-                bytemuck::cast_slice(&update[0].1)
+                bytemuck::cast_slice(&update[0].1),
             );
 
-            let chunk_data_offset =
-                FILLED_CHUNKS_MEM_OFFSET as u32 + chunk_pos_index * std::mem::size_of::<u32>() as u32;
+            let chunk_data_offset = FILLED_CHUNKS_MEM_OFFSET as u32
+                + chunk_pos_index * std::mem::size_of::<u32>() as u32;
 
-            command_buffer.update_buffer(
-                world_buffer,
-                chunk_data_offset.into(),
-                &[1],
-            )
+            command_buffer.update_buffer(world_buffer, chunk_data_offset.into(), &[1])
         }
 
         command_buffer.finish();
@@ -119,9 +117,5 @@ unsafe fn clear_world<B: gfx_hal::Backend>(
     world_buffer: &B::Buffer,
     mut command_buffer: &mut ResMut<B::CommandBuffer>,
 ) {
-    command_buffer.fill_buffer(
-        world_buffer,
-        SubRange::WHOLE,
-        0,
-    );
+    command_buffer.fill_buffer(world_buffer, SubRange::WHOLE, 0);
 }

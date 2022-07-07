@@ -1,7 +1,7 @@
-use std::fs::File;
-use std::ops::Range;
 use bytemuck;
 use gfx_hal::pso::ShaderStageFlags;
+use std::fs::File;
+use std::ops::Range;
 
 /// Data that needs to be pushed to the gpu, that isn't world data or a texture.
 #[repr(C)]
@@ -13,6 +13,8 @@ pub struct GPUData {
     pub palette: [[f32; 4]; 256],
 
     pub text_to_show: [u32; 256],
+
+    pub time: i32,
 
     pub contrast: f32,
     pub brightness: f32,
@@ -36,7 +38,7 @@ impl Default for GPUData {
                 let byte_index = c * 4;
 
                 palette[c] = [
-                    bytes[byte_index    ] as f32 / 256.0,
+                    bytes[byte_index] as f32 / 256.0,
                     bytes[byte_index + 1] as f32 / 256.0,
                     bytes[byte_index + 2] as f32 / 256.0,
                     bytes[byte_index + 3] as f32 / 256.0,
@@ -51,6 +53,7 @@ impl Default for GPUData {
             dir: [0.0, 0.0, 0.0, 0.0],
             palette,
             text_to_show: [0; 256],
+            time: 0,
             contrast: 0.0,
             brightness: 0.0,
             exposure: 1.0,

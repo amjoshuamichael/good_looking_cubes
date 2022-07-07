@@ -21,8 +21,8 @@ lazy_static = "1.4.0"
 anyhow = "1.0.52"
 
 [dependencies.bevy]
-path = "bevy"
 default-features = false
+version = "0.6.0"
 features = [
     "bevy_dynamic_plugin",
     "bevy_audio",

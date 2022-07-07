@@ -20,6 +20,10 @@ bool is_letter_here() {
         floor((vertex_color.x / 2 + 0.5) * CHAR_AMOUNT)
     );
 
+    if (pos_index > 128) {
+        return false;
+    }
+
     uint letter_index = pc.text_to_show[pos_index];
 
     uint char_x = uint(letter_index * CHAR_WIDTH + fract(vertex_color.x / 2 * float(CHAR_AMOUNT)) * 7);

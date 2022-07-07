@@ -12,13 +12,13 @@ pub fn draw(
     models: ResMut<Assets<Model>>,
 ) {
     for (model_holder, mut background) in objects_to_draw.iter_mut() {
-        if background.has_been_drawn { continue }
-
-        println!("drawing!!");
+        if background.has_been_drawn {
+            continue;
+        }
 
         let model = match models.get(model_holder.handle()) {
             Some(val) => Some(val),
-            None => { continue }
+            None => continue,
         };
 
         background.has_been_drawn = true;
@@ -29,10 +29,10 @@ pub fn draw(
             match world_updates.get_mut(&update.pos) {
                 Some(mut updates_at_pos) => {
                     updates_at_pos.push((ModelType::Background, update.data));
-                },
+                }
                 None => {
                     world_updates.insert(update.pos, vec![(ModelType::Background, update.data)]);
-                },
+                }
             }
         }
     }

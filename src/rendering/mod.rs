@@ -67,7 +67,7 @@ unsafe fn create_window(mut app: App) {
         .build(&event_loop)
         .expect("Failed to create window");
 
-    let (width, height) = (400, 400);
+    let (width, height) = (200, 200);
 
     let instance = backend::Instance::create("ctklr", 1).expect("Backend not supported");
     let surface = instance
@@ -194,13 +194,6 @@ unsafe fn create_window(mut app: App) {
                 *control_flow = ControlFlow::Exit
             }
             WindowEvent::KeyboardInput { ref input, .. } => {
-                {
-                    let components = &app.world.components().components;
-                    for component in components.iter() {
-                        println!("{}", component.descriptor.name());
-                    }
-                }
-
                 let world = app.world.cell();
                 let mut keyboard_input_events = world
                     .get_resource_mut::<Events<bevy::input::keyboard::KeyboardInput>>()

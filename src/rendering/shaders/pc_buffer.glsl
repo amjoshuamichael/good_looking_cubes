@@ -6,6 +6,8 @@ layout(push_constant) uniform PushConstants {
 
     uint text_to_show[256];
 
+    int time;
+
     float contrast;
     float brightness;
     float exposure;

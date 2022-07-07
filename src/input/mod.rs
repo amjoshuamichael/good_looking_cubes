@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use bevy::prelude::KeyCode::*;
 use crate::GPUData;
+use bevy::prelude::KeyCode::*;
+use bevy::prelude::*;
 
 #[derive(Default)]
 pub struct CtklrInputPlugin;
@@ -45,7 +45,9 @@ fn camera_movement(
     input_state: Res<KeyboardInputState>,
     mut gpu_data: ResMut<GPUData>,
 ) {
-    if *input_state != KeyboardInputState::FreeCam { return; }
+    if *input_state != KeyboardInputState::FreeCam {
+        return;
+    }
 
     let mut move_speed = 0.02;
 
@@ -83,4 +85,11 @@ fn camera_movement(
     } else if keyboard_input.pressed(E) {
         gpu_data.dir[0] += move_speed;
     }
+
+    if keyboard_input.just_pressed(P) {
+        gpu_data.time += 1;
+        println!("{}", gpu_data.time);
+    }
+
+    //gpu_data.time += 1;
 }

@@ -12,10 +12,10 @@ pub const VOXEL_RENDER: &str = concat!(
     include_str!("pc_buffer.glsl"),
     include_str!("world_buffer.glsl"),
     include_str!("vector_utils.glsl"),
-    include_str!("random.glsl"),
     include_str!("index_world.glsl"),
     include_str!("extract_color.glsl"),
     include_str!("hit_in_direction.glsl"),
+    include_str!("random.glsl"),
     include_str!("voxel_render.frag"),
 );
 

@@ -4,8 +4,8 @@ use bevy::asset::{AssetLoader, BoxedFuture, LoadContext, LoadedAsset};
 use bevy::prelude::*;
 use bevy::reflect::TypeUuid;
 
-use crate::world::{CHUNK_SIZE, CHUNK_VOL, ChunkData};
 use crate::world::parse_pec::parse_pec;
+use crate::world::{ChunkData, CHUNK_SIZE, CHUNK_VOL};
 
 #[derive(Default)]
 pub struct ModelAssetPlugin;
@@ -26,9 +26,7 @@ pub struct Model {
 
 impl Model {
     pub fn new() -> Self {
-        Model {
-            voxels: Vec::new(),
-        }
+        Model { voxels: Vec::new() }
     }
 }
 
@@ -43,7 +41,6 @@ impl AssetLoader for ModelLoader {
     ) -> BoxedFuture<'a, Result<(), anyhow::Error>> {
         Box::pin(async move {
             //TODO: optimize
-
             let pec = {
                 let model_path = load_context
                     .path()
@@ -57,7 +54,7 @@ impl AssetLoader for ModelLoader {
                 let model_name = &model_path[0..model_path.len() - 4];
 
                 let pec_file_data = read_to_string(format!("assets/models/{}.pec", model_name))
-                    .expect(&*format!("failed to get pec data at assets/models/{}.pec", model_name));
+                    .unwrap_or_else(|_| "".into());
 
                 parse_pec(pec_file_data)
             };
