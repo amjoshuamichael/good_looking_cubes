@@ -3,13 +3,14 @@ This is a test of [gfx-hal](https://github.com/gfx-rs/gfx) I made a while back. 
 
 Screenshots:
 `cargo run`
+![](/screenshots/basic_screenshot.jpg)
 ![](Good%20Looking%20Cubes/Screen%20Shot%202022-09-03%20at%2011.35.46%20PM.jpg)
 
 ⌘⇧C  ->  load christmas↩:
-![](Good%20Looking%20Cubes/Screen%20Shot%202022-09-03%20at%2011.36.19%20PM.jpg)
+![](/screenshots/christmas_screenshot.jpg)
 
 ⌘⇧C  ->  load monu16↩:
-![](Good%20Looking%20Cubes/Screen%20Shot%202022-09-03%20at%2011.36.41%20PM.jpg)
+![](/screenshots/monu16_screenshot.jpg)
 
 other examples available via the `load` command:
 
