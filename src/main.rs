@@ -7,9 +7,9 @@ use rendering::CtklrRenderPlugin;
 use world::CtklrWorldPlugin;
 
 use crate::rendering::gpu_data::GPUData;
-use crate::world::CHUNK_COUNT;
 use crate::world::draw_type::Background;
 use crate::world::model_type::ModelHolder;
+use crate::world::CHUNK_COUNT;
 
 mod debug;
 mod input;
@@ -19,6 +19,8 @@ mod world;
 const PHYSICS_TIME_STEP: f64 = 1.0 / 60.0;
 
 fn main() {
+    println!("hello!");
+
     env_logger::init();
 
     App::new()
@@ -38,14 +40,20 @@ fn main() {
         .run();
 }
 
-fn change_tilemap(
-    mut model_holders: Query<(&mut Background, &mut ModelHolder)>,
-) {
+fn change_tilemap(mut model_holders: Query<(&mut Background, &mut ModelHolder)>) {
     for (mut background, mut model_holder) in model_holders.iter_mut() {
-        if background.has_been_drawn == true { return }
+        if background.has_been_drawn == true {
+            return;
+        }
 
-        if let ModelHolder::Tiled {ref mut filled_spots, ..} = *model_holder {
-            for spot in filled_spots.iter_mut() { *spot = false; }
+        if let ModelHolder::Tiled {
+            ref mut filled_spots,
+            ..
+        } = *model_holder
+        {
+            for spot in filled_spots.iter_mut() {
+                *spot = false;
+            }
 
             let mut rng = thread_rng();
 
@@ -59,11 +67,14 @@ fn change_tilemap(
 }
 
 fn spawn_tilemap(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let mut tiled = crate::world::model_type::ModelHolder::new_tiled(
-        asset_server.load("models/block.vox"),
-    );
+    let mut tiled =
+        crate::world::model_type::ModelHolder::new_tiled(asset_server.load("models/block.vox"));
 
-    if let ModelHolder::Tiled { ref mut filled_spots, .. } = tiled {
+    if let ModelHolder::Tiled {
+        ref mut filled_spots,
+        ..
+    } = tiled
+    {
         let mut rng = thread_rng();
 
         for _ in 1..100 {

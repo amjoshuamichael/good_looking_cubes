@@ -7,7 +7,7 @@ const uint AIR = 0;
 
 vec4 sample_at_hit(hit the_hit, float num_samples) {
     if (is_air(the_hit.unit_code)) {
-        return mix(vec4(1.0), vec4(vertex_color.xy, 1.0, 1.0), 0.5);
+        return mix(vec4(1.0), vec4(hash32(vertex_color.xy * 100), 1.0), 0.2);
     }
 
     // 977 is a number that seemed to look good after i tried a bunch of prime numbers
@@ -23,7 +23,7 @@ vec4 sample_at_hit(hit the_hit, float num_samples) {
 
     for (float i = 0; i < num_samples; i++) {
         rand_vec -= vec3(0.5);
-        vec3 to_light = normalize(the_hit.normal + normalize(rand_vec) * hit_normal_mask * 4.0);
+        vec3 to_light = normalize(the_hit.normal + normalize(rand_vec) * hit_normal_mask * 5.0);
         hit to_light_hit = hit_in_direction(the_hit.pos, to_light, bounce_dist, AIR);
         float hit_dist = length(the_hit.pos - to_light_hit.pos) / float(bounce_dist);
 
@@ -33,7 +33,7 @@ vec4 sample_at_hit(hit the_hit, float num_samples) {
         } else if (emission_from(to_light_hit.unit_code) > 0) {
             color_out += emission_from(to_light_hit.unit_code) * color_from(to_light_hit.unit_code) * 1.5 * (1 - hit_dist);
         } else {
-            color_out += albedo_color * hit_dist;
+            color_out += albedo_color * hit_dist + vec4(0.01, 0.02, 1.0, 1.0);
         }
 
         if (light_amount / i > highlight_sensitivity && i > highlight_samples) {
@@ -43,7 +43,7 @@ vec4 sample_at_hit(hit the_hit, float num_samples) {
         rand_vec = hash33(rand_vec);
     }
 
-    return color_out / num_samples;
+    return mix(vec4(0.04, 0.06, 0, 1.0), albedo_color, light_amount / num_samples);
 }
 
 void main() {

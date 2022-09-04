@@ -77,7 +77,12 @@ fn camera_movement(
         gpu_data.dir[2] -= move_speed;
     } else if keyboard_input.pressed(Y) {
         gpu_data.dir[2] += move_speed;
-        println!("{}", gpu_data.dir[2]);
+    }
+
+    if keyboard_input.pressed(G) {
+        gpu_data.dir[1] -= move_speed;
+    } else if keyboard_input.pressed(H) {
+        gpu_data.dir[1] += move_speed;
     }
 
     if keyboard_input.pressed(Q) {
